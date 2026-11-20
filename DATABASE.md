@@ -6,7 +6,9 @@
 
 当前保留 React + TypeScript 前端、FastAPI 业务服务、SQLite 业务数据库及 changedetection.io 正文监测引擎。这个分层适合本机单用户调试和当前五个栏目。业务分类不放在监测引擎里，前端不直接访问引擎凭证。
 
-SQLite 文件为 `data/observatory.sqlite3`，启用 WAL 和每个连接的外键校验。结构通过 PRAGMA user_version 管理，目前为 4。版本 4 增加 `data_scopes` 关系与活动来源触发器；任何 `in_scope=1` 的来源必须绑定明确的数据范围。迁移先备份并在事务中执行，执行结束检查 foreign_key_check。
+SQLite 文件为 `data/observatory.sqlite3`，启用 WAL 和每个连接的外键校验。结构通过 PRAGMA user_version 管理，目前为 5。版本 4 增加 `data_scopes` 关系与活动来源触发器；任何 `in_scope=1` 的来源必须绑定明确的数据范围。版本 5 为 source_entries 增加 source_position，保存官网列表顺序。迁移在事务中执行，执行结束检查 foreign_key_check；正式迁移前需单独备份。
+
+V2 规划改用 PostgreSQL，并新增成员、个人阅读状态与提醒发送关系，详见 WECHAT_UPGRADE_PLAN.md。本文记录当前 SQLite 本机版，不表示 V2 已实施。
 
 2026-11-20 已执行物理隔离：旧 `data/` 完整移入 `archive/china-scope-reset-20261120-110023/`，并另存压缩备份 `backups/observatory-20261120-110016.zip`。随后从空目录初始化活动库和引擎。当前活动库只有 `CN` 一个国家、`cn-exportcontrol` 一个发布网站、5 个活动来源；没有从旧多国库复制文章、版本、提醒、附件或监测任务。
 
