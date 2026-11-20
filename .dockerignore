@@ -1,0 +1,15 @@
+.git
+.venv*
+**/node_modules
+**/__pycache__
+**/dist
+data
+data-v2
+archive
+backups
+logs*
+output
+.env*
+**/*.key
+**/*.pem
+frontend
