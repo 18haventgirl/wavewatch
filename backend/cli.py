@@ -35,8 +35,8 @@ def main():
             from backend.import_legacy import import_snapshot
             print(json.dumps(import_snapshot(engine, args.path, args.owner, args.apply, args.target_files), ensure_ascii=False, indent=2))
         elif args.command in ('scheduler', 'tick'):
-            from backend.scheduler import tick, serve
-            print(tick(engine)) if args.command == 'tick' else serve(engine)
+            from backend.scheduler import tick, tick_monitoring, serve
+            print({'sources': tick(engine), 'monitoring': tick_monitoring(engine)}) if args.command == 'tick' else serve(engine)
         elif args.command == 'worker':
             from backend.worker import run_once, serve
             print(run_once(engine)) if args.once else serve(engine)

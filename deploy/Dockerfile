@@ -7,5 +7,7 @@ RUN pip install --no-cache-dir -r /tmp/requirements.lock.txt \
 COPY backend backend
 COPY app/__init__.py app/collectors.py app/
 COPY config config
+COPY scripts/extract_pdf.py scripts/extract_pdf.py
+RUN mkdir -p /srv/guanlan/data-v2 && chown guanlan:guanlan /srv/guanlan/data-v2
 USER guanlan
 CMD ["uvicorn", "backend.api:create_app", "--factory", "--host", "0.0.0.0", "--port", "8842", "--no-access-log"]

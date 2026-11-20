@@ -62,6 +62,14 @@ def renew(engine, job, lease_seconds=120):
             .values(lease_until=now + lease_seconds)).rowcount == 1
 
 
+def assert_lease(conn, job):
+    row = conn.execute(select(jobs.c.id).where(
+        jobs.c.id == job['id'], jobs.c.lease_token == job['lease_token'],
+        jobs.c.state == 'leased', jobs.c.lease_until > time.time()).with_for_update()).first()
+    if not row:
+        raise RuntimeError('任务租约已失效，本次业务写入回滚')
+
+
 def finish(conn, job):
     # A stale worker must never commit business writes after another took its lease.
     updated = conn.execute(update(jobs).where(

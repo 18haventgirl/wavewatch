@@ -6,6 +6,11 @@ x-backend: &backend
   environment: &environment
     OBS_DATABASE_URL: postgresql+psycopg://guanlan:${OBS_DB_PASSWORD:?Set OBS_DB_PASSWORD}@postgres:5432/guanlan_v2
     OBS_ADMIN_TOKEN: ${OBS_ADMIN_TOKEN:?Set OBS_ADMIN_TOKEN}
+    OBS_ENGINE_URL: http://changedetection:5000
+    OBS_ENGINE_KEY: ${OBS_ENGINE_KEY:?Set a dedicated OBS_ENGINE_KEY}
+    OBS_FILES_ROOT: /srv/guanlan/data-v2
+  volumes:
+    - files:/srv/guanlan/data-v2
   restart: unless-stopped
 
 services:
@@ -52,5 +57,23 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      changedetection:
+        condition: service_started
+  changedetection:
+    image: dgtlmoon/changedetection.io:0.70.4
+    entrypoint: [python, /bootstrap/engine_bootstrap.py]
+    environment:
+      OBS_ENGINE_DATA: /datastore
+      OBS_ENGINE_HOST: 0.0.0.0
+      OBS_ENGINE_PORT: "5000"
+      OBS_ENGINE_KEY: ${OBS_ENGINE_KEY:?Set a dedicated OBS_ENGINE_KEY}
+      FETCH_WORKERS: "3"
+      LOGGER_LEVEL: WARNING
+    volumes:
+      - engine-data:/datastore
+      - ../backend/engine_bootstrap.py:/bootstrap/engine_bootstrap.py:ro
+    restart: unless-stopped
 volumes:
   pgdata:
+  files:
+  engine-data:

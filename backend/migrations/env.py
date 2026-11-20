@@ -1,5 +1,5 @@
 from alembic import context
-from backend.migrations.schema_v1 import metadata
+from backend.schema import metadata
 
 connection = context.config.attributes.get('connection')
 if connection is None:

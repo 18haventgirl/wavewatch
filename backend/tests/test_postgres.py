@@ -10,6 +10,7 @@ from backend import catalog, queue
 from backend.import_legacy import import_snapshot
 from backend.tests import test_foundation as foundation
 from backend.tests import test_import as legacy_import
+from backend.tests import test_monitoring as monitoring
 
 
 class PostgresMixin:
@@ -71,3 +72,16 @@ class PostgresImportTests(PostgresMixin, legacy_import.ImportTests):
             aid = conn.scalar(select(t['articles'].c.id))
             vid = conn.execute(insert(t['versions']).values(article_id=aid, stamp='3', content='next', digest='x' * 64, created=1).returning(t['versions'].c.id)).scalar_one()
             self.assertEqual(vid, 3)
+
+
+@unittest.skipUnless(os.environ.get('OBS_TEST_DATABASE_URL'), 'isolated PostgreSQL test URL not configured')
+class PostgresMonitoringTests(PostgresMixin, monitoring.MonitoringTests):
+    def setUp(self):
+        super().setUp()
+        self.configure_postgres()
+        with self.engine.begin() as conn:
+            catalog.seed(conn)
+
+    def tearDown(self):
+        self.cleanup_postgres()
+        super().tearDown()

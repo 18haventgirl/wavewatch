@@ -4,9 +4,10 @@ from sqlalchemy.pool import StaticPool
 from sqlalchemy.engine import make_url
 from alembic import command
 from alembic.config import Config
-from backend.migrations.schema_v1 import metadata
+from backend.schema import metadata
 
 ROOT = Path(__file__).resolve().parents[1]
+CURRENT_REVISION = '0002_monitoring'
 tables = metadata.tables
 
 

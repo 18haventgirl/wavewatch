@@ -1,8 +1,8 @@
-# 服务器版开发基础（P1 第一批）
+# 服务器版开发环境（P1 监测基础）
 
-与当前 `run.py` 本机版隔离。当前提供 SQLAlchemy/Alembic 存储、SQLite v5 一致性导入、独立 scheduler/worker、五栏目列表发现、受保护的查询接口。
+与当前 `run.py` 本机版隔离。当前提供 SQLAlchemy/Alembic 存储、SQLite v5 一致性导入、独立 scheduler/worker、五栏目列表发现、正文历史同步、标题核实、附件发现/版本保存和受保护的查询接口。
 
-目前没有小程序客户端、微信登录、日报发送、完整的服务端正文/附件持续同步。旧版正文引擎仍由现有本机版运行。生产切换前必须补齐这些功能和认证；不能将本开发部署当成正式发布版。
+目前没有小程序客户端、微信登录、日报发送及正式 HTTPS 部署。独立引擎的真实正文链路已验证，Linux 容器构建仍受 Docker Hub 连接中断影响。生产切换前必须补齐成员认证和部署验收，不能将本开发配置当成正式发布版。
 
 ## 独立环境
 
@@ -14,6 +14,9 @@
 $env:OBS_DATABASE_URL = 'postgresql+psycopg://USER:PASSWORD@127.0.0.1:55432/guanlan_v2'
 # 管理令牌至少 32 个字符；通过本机安全配置提供，不提交真实值。
 $env:OBS_ADMIN_TOKEN = 'REPLACE_WITH_A_FRESH_RANDOM_TOKEN_AT_LEAST_32_CHARS'
+$env:OBS_ENGINE_URL = 'http://127.0.0.1:8851'
+$env:OBS_ENGINE_KEY = 'REPLACE_WITH_A_SEPARATE_RANDOM_ENGINE_KEY'
+$env:OBS_FILES_ROOT = (Join-Path (Get-Location) 'data-v2')
 .\.venv-v2\Scripts\python.exe -m backend.cli migrate
 ```
 
@@ -53,6 +56,8 @@ $env:OBS_ADMIN_TOKEN = 'REPLACE_WITH_A_FRESH_RANDOM_TOKEN_AT_LEAST_32_CHARS'
 - `GET /api/v1/sources`
 - `GET /api/v1/articles?category=cn-domestic-laws&sort=official`
 - `GET /api/v1/jobs`
+- `GET /api/v1/articles/{id}`：版本、差异、附件、独立采集状态
+- `GET /api/v1/attachments/{id}/download`：受身份验证保护的文件
 
 当前令牌仅作为开发期间管理保护，不能嵌入未来小程序包。微信用户会话与邀请权限将在 P2 实现。
 
@@ -64,9 +69,11 @@ $env:OBS_ADMIN_TOKEN = 'REPLACE_WITH_A_FRESH_RANDOM_TOKEN_AT_LEAST_32_CHARS'
 docker compose --env-file deploy/.env -f deploy/compose.dev.yml up --build -d
 ```
 
-该配置仅绑定本机 8842/55432，数据库、API、scheduler、worker 分开。首次迁移后库为空，选择 seed 或迁移导入。第一次导入前先停 scheduler/worker，确保目标不被写入。需要迁移本机数据时可通过主机 CLI 访问映射的 PostgreSQL；附件目录通过 `--target-files` 指定。
+该配置仅绑定本机 8842/55432，数据库、API、scheduler、worker、独立 changedetection.io 分开；引擎不对主机开放端口。必须在 deploy/.env 配置额外的 OBS_ENGINE_KEY。首次迁移后库为空，选择 seed 或迁移导入。第一次导入前先停 scheduler/worker，确保目标不被写入。附件使用 API 与 Worker 共用的持久化卷；不能把主机附件复制到任意临时目录后就宣称容器可用，正式容器迁移必须把附件导入同一卷。
 
-数据库卷持久化。常规停止使用 `docker compose ... stop`；不要用 `down -v` 作为停止方式。此 Compose 暂不含 HTTPS 网关和 changedetection 服务，不能公开部署。
+数据库、附件和引擎均使用持久化卷。常规停止使用 `docker compose ... stop`；不要用 `down -v` 作为停止方式。此 Compose 暂不含 HTTPS 网关，不能公开部署。
+
+`backend.engine_bootstrap` 在上游引擎启动前通过固定版本的配置存储设置专用 API key，并启用校验；不修改上游代码、不加载旧 data/engine 的密钥或任务。Windows 独立运行该模块时使用原 .venv（已安装固定版上游），配置 OBS_ENGINE_DATA 指向 data-v2 下的新目录，OBS_ENGINE_HOST 默认为 127.0.0.1。不要把它指向本机版 data/engine。
 
 ## 验证
 
@@ -76,6 +83,8 @@ docker compose --env-file deploy/.env -f deploy/compose.dev.yml up --build -d
 .\.venv-v2\Scripts\python.exe scripts/test_server_postgres.py
 # 同时把真实 SQLite 只读导入临时 PostgreSQL，逐表核验；不覆盖源文件。
 .\.venv-v2\Scripts\python.exe scripts/test_server_postgres.py --legacy-source data/observatory.sqlite3
+# 真实官网 -> 独立上游引擎 -> 正文版本 -> 受保护详情接口
+.\.venv-v2\Scripts\python.exe -X utf8 scripts/smoke_server_monitor.py
 ```
 
 没有 `OBS_TEST_DATABASE_URL` 时 PostgreSQL 测试明确跳过。不能以 SQLite 测试通过代替 PostgreSQL 测试通过。测试容器自动移除，运行过程会下载官方镜像；旧本机版的数据库和容器不在清理范围。

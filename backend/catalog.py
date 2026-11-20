@@ -59,4 +59,8 @@ def save_article(conn, sid, item, baseline):
         insert_ignore(conn, se, entry, ['source_id', 'external_key'])
         entry.pop('first_seen')
         conn.execute(update(se).where(se.c.source_id == sid, se.c.external_key == item['external_id']).values(**entry))
+    parent = item.get('parent_id')
+    if parent and parent != aid:
+        insert_ignore(conn, t['article_attachments'], dict(parent_id=parent, attachment_id=aid,
+                                                         first_seen=now), ['parent_id', 'attachment_id'])
     return aid, fresh
