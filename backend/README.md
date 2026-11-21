@@ -1,8 +1,8 @@
-# 服务器版开发环境（P1 监测基础）
+# 服务器版开发环境（P2 小程序联调）
 
 与当前 `run.py` 本机版隔离。当前提供 SQLAlchemy/Alembic 存储、SQLite v5 一致性导入、独立 scheduler/worker、五栏目列表发现、正文历史同步、标题核实、附件发现/版本保存和受保护的查询接口。
 
-目前没有小程序客户端、微信登录、日报发送及正式 HTTPS 部署。独立引擎的真实正文链路已验证，Linux 容器构建仍受 Docker Hub 连接中断影响。生产切换前必须补齐成员认证和部署验收，不能将本开发配置当成正式发布版。
+已提供 Taro 小程序、服务端微信登录、一次性邀请、独立个人未读与偏好接口；本机操作见 [miniprogram/README.md](../miniprogram/README.md)。真实微信登录、开发者工具界面与真机尚待联调；日报发送及正式 HTTPS 部署尚未完成。独立引擎的真实正文链路已验证，Linux 容器构建仍受 Docker Hub 连接中断影响，不能将本开发配置当成正式发布版。
 
 ## 独立环境
 
@@ -51,15 +51,15 @@ $env:OBS_FILES_ROOT = (Join-Path (Get-Location) 'data-v2')
 
 手动单次调度/消费：`python -m backend.cli tick`、`python -m backend.cli worker --once`。API 进程不进行迁移、采集或后台同步；增加 API 实例不增加调度线程。
 
-健康接口 `/health/live`、`/health/ready` 不暴露数据。业务接口需要 `Authorization: Bearer <开发管理令牌>`：
+健康接口 `/health/live`、`/health/ready` 不暴露数据。业务查询接口需要 `Authorization: Bearer <成员会话或开发管理令牌>`：
 
 - `GET /api/v1/sources`
 - `GET /api/v1/articles?category=cn-domestic-laws&sort=official`
-- `GET /api/v1/jobs`
+- `GET /api/v1/jobs`：仅管理员
 - `GET /api/v1/articles/{id}`：版本、差异、附件、独立采集状态
 - `GET /api/v1/attachments/{id}/download`：受身份验证保护的文件
 
-当前令牌仅作为开发期间管理保护，不能嵌入未来小程序包。微信用户会话与邀请权限将在 P2 实现。
+开发管理令牌不能嵌入小程序包，也不能代替个人登录。`POST /api/v1/auth/wechat` 以微信 code 和首次邀请码换取短期成员会话；个人接口使用 `/api/v1/me`、`/api/v1/me/events` 和 `/api/v1/me/preferences`。微信密钥只由后端读取 `OBS_WECHAT_APP_SECRET`；本机联调入口提供隐藏输入，不写入文件。管理员通过 `POST /api/v1/admin/invitations` 生成普通成员的一次性邀请码。
 
 ## 本地容器配置
 

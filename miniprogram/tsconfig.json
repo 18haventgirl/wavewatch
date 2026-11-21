@@ -1,0 +1,1 @@
+{"compilerOptions":{"target":"ES2020","module":"esnext","moduleResolution":"node","jsx":"react-jsx","strict":true,"skipLibCheck":true,"esModuleInterop":true,"types":["@tarojs/taro","node"]},"include":["src","config"]}

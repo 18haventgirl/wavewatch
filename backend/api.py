@@ -8,12 +8,13 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse
 from sqlalchemy import select, func, or_, literal, text
 from backend.settings import Settings
+from backend.auth import authorize
 from backend.storage import make_engine, tables as t, CURRENT_REVISION
 
 bearer = HTTPBearer(auto_error=False)
 
 
-def create_app(settings=None, engine=None):
+def create_app(settings=None, engine=None, wechat_provider=None):
     settings = settings or Settings.load()
     engine = engine or make_engine(settings.database_url)
 
@@ -26,11 +27,16 @@ def create_app(settings=None, engine=None):
     app = FastAPI(title='观澜服务器版 · 开发基础接口', lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
 
-    def admin(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)):
-        if len(settings.admin_token) < 32:
-            raise HTTPException(503, '尚未配置开发管理令牌')
-        if not credentials or not hmac.compare_digest(credentials.credentials, settings.admin_token):
+    def member(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)):
+        if not credentials:
             raise HTTPException(401, '需要身份验证', headers={'WWW-Authenticate': 'Bearer'})
+        ready()
+        return authorize(engine, settings, credentials.credentials)
+
+    def admin(principal=Depends(member)):
+        if principal.role != 'admin':
+            raise HTTPException(403, '需要管理员权限')
+        return principal
 
     def ready():
         try:
@@ -50,7 +56,7 @@ def create_app(settings=None, engine=None):
         ready()
         return {'status': 'ready', 'edition': 'server-foundation'}
 
-    @app.get('/api/v1/sources', dependencies=[Depends(admin), Depends(ready)])
+    @app.get('/api/v1/sources', dependencies=[Depends(member), Depends(ready)])
     def sources():
         s, c = t['sources'], t['categories']
         with engine.connect() as conn:
@@ -58,7 +64,7 @@ def create_app(settings=None, engine=None):
                                 .where(s.c.in_scope == 1).order_by(c.c.position)).mappings()
             return {'items': [dict(r) for r in rows]}
 
-    @app.get('/api/v1/articles', dependencies=[Depends(admin), Depends(ready)])
+    @app.get('/api/v1/articles', dependencies=[Depends(member), Depends(ready)])
     def articles(category: str = '', q: str = Query('', max_length=200),
                  page: int = Query(1, ge=1), sort: str = Query('latest', pattern='^(latest|official)$')):
         a, m, s, se = t['articles'], t['article_sources'], t['sources'], t['source_entries']
@@ -96,7 +102,7 @@ def create_app(settings=None, engine=None):
             raise HTTPException(404, '信息不在当前监测范围内')
         return dict(row)
 
-    @app.get('/api/v1/articles/{aid}', dependencies=[Depends(admin), Depends(ready)])
+    @app.get('/api/v1/articles/{aid}', dependencies=[Depends(member), Depends(ready)])
     def detail(aid: str):
         with engine.connect() as conn:
             article = scoped(conn, aid)
@@ -115,7 +121,7 @@ def create_app(settings=None, engine=None):
                            fromfile='上一个版本', tofile='当前版本', lineterm='')) if len(versions) > 1 else [])
         return article
 
-    @app.get('/api/v1/attachments/{aid}/download', dependencies=[Depends(admin), Depends(ready)])
+    @app.get('/api/v1/attachments/{aid}/download', dependencies=[Depends(member), Depends(ready)])
     def download(aid: str):
         with engine.connect() as conn:
             article = scoped(conn, aid)
@@ -131,4 +137,6 @@ def create_app(settings=None, engine=None):
         return FileResponse(path, media_type='application/octet-stream',
                             filename=re.sub(r'[<>:"/\\|?*]', '_', article['title'])[:180])
 
+    from backend.member_routes import router
+    app.include_router(router(engine, settings, member, admin, ready, scoped, wechat_provider))
     return app

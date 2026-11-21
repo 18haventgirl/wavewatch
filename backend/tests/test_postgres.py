@@ -3,6 +3,8 @@ import concurrent.futures
 import os
 import uuid
 import unittest
+from fastapi.testclient import TestClient
+from backend.api import create_app
 from sqlalchemy import text, select, insert
 from sqlalchemy.engine import make_url
 from backend.storage import make_engine, migrate, tables as t
@@ -11,6 +13,7 @@ from backend.import_legacy import import_snapshot
 from backend.tests import test_foundation as foundation
 from backend.tests import test_import as legacy_import
 from backend.tests import test_monitoring as monitoring
+from backend.tests import test_members as members
 
 
 class PostgresMixin:
@@ -83,5 +86,24 @@ class PostgresMonitoringTests(PostgresMixin, monitoring.MonitoringTests):
             catalog.seed(conn)
 
     def tearDown(self):
+        self.cleanup_postgres()
+        super().tearDown()
+
+
+@unittest.skipUnless(os.environ.get('OBS_TEST_DATABASE_URL'), 'isolated PostgreSQL test URL not configured')
+class PostgresMemberTests(PostgresMixin, members.MemberTests):
+    def setUp(self):
+        super().setUp()
+        self.client.__exit__(None, None, None)
+        self.configure_postgres()
+        with self.engine.begin() as conn:
+            catalog.seed(conn)
+            self.aid, _ = catalog.save_article(conn, 'cn-policy-laws', dict(
+                url='https://exportcontrol.mofcom.gov.cn/member.html', title='成员测试'), True)
+        self.client = TestClient(create_app(self.settings, self.engine, members.FakeWeChat()))
+        self.client.__enter__()
+
+    def tearDown(self):
+        self.client.__exit__(None, None, None)
         self.cleanup_postgres()
         super().tearDown()

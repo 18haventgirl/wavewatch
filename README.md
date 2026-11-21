@@ -1,6 +1,6 @@
 # 观澜 · 出口管制信息监测
 
-微信小程序与服务器持续监测的下一版规划见 [WECHAT_UPGRADE_PLAN.md](WECHAT_UPGRADE_PLAN.md)，版本管理约定见 [GIT_WORKFLOW.md](GIT_WORKFLOW.md)。V2 已开始第一批服务器基础开发，独立使用说明见 [backend/README.md](backend/README.md)；用户准备事项见 [USER_PREPARATION.md](USER_PREPARATION.md)。下述仍为可运行的本机版，V2 尚未生产部署。
+微信小程序与服务器持续监测的下一版规划见 [WECHAT_UPGRADE_PLAN.md](WECHAT_UPGRADE_PLAN.md)，版本管理约定见 [GIT_WORKFLOW.md](GIT_WORKFLOW.md)。V2 已实现服务器监测基础和小程序成员接口，本机微信联调见 [miniprogram/README.md](miniprogram/README.md)，后端说明见 [backend/README.md](backend/README.md)；用户准备事项见 [USER_PREPARATION.md](USER_PREPARATION.md)。下述仍为可运行的本机版，V2 尚未生产部署。
 
 本机运行的中文信息观察台，前端沿用“利润分析/任务2”的冷蓝渐变、宽内容区和玻璃面板风格。当前仅监测中国出口管制信息网：法律（13）、法规（14）、规章及规范性文件（15）作为核心政策栏目，国内动态（1）、国际动态（2）作为辅助资讯栏目。复用 changedetection.io 0.70.4 保存正文快照；业务数据使用 SQLite。完整关系说明见 DATABASE.md。
 

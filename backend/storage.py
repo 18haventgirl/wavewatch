@@ -7,7 +7,7 @@ from alembic.config import Config
 from backend.schema import metadata
 
 ROOT = Path(__file__).resolve().parents[1]
-CURRENT_REVISION = '0002_monitoring'
+CURRENT_REVISION = '0003_members'
 tables = metadata.tables
 
 
