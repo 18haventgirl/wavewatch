@@ -16,7 +16,17 @@ from backend.settings import Settings
 from backend.storage import make_engine, migrate, tables as t
 
 
+def configure_local_debug():
+    # This launcher binds only 127.0.0.1. Keep the checked-in project defaults
+    # strict and override only this computer's ignored developer-tools config.
+    path = ROOT / 'miniprogram' / 'project.private.config.json'
+    config = json.loads(path.read_text(encoding='utf-8-sig')) if path.exists() else {}
+    config.setdefault('setting', {})['urlCheck'] = False
+    path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+
 def main():
+    configure_local_debug()
     folder = ROOT / 'data-v2' / 'wechat-dev'
     folder.mkdir(parents=True, exist_ok=True)
     config = json.loads((ROOT / 'config' / 'wechat.json').read_text(encoding='utf-8'))
