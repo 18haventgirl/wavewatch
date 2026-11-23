@@ -1,5 +1,6 @@
 import {useEffect, useState} from 'react';
-import {AlertCircle, FileText, Layers, Paperclip, Search, X} from 'lucide-react';
+import {AlertCircle, Layers, Paperclip, Search, X} from 'lucide-react';
+import {IconLibrary} from '../icons';
 import {api, type ArticleRow, type Page, type Source} from '../api';
 import {ago, publishedDate} from '../format';
 import {useData, useHotkeys} from '../hooks';
@@ -61,7 +62,7 @@ export default function Library({onOpen, sources, refreshKey}: {onOpen: (id: str
 
     {error ? <ErrorNote message={error} onRetry={reload}/> : null}
     <section className="glass panel" aria-busy={loading}>
-      {!data ? <Loading/> : !items.length ? <Empty icon={<FileText/>} title="没有找到文章">试试更短的关键词，或切换栏目和状态。</Empty> :
+      {!data ? <Loading/> : !items.length ? <Empty icon={<IconLibrary size={26}/>} title="没有找到文章">试试更短的关键词，或切换栏目和状态。</Empty> :
         <div className="doc-list">{items.map((a, i) => <button key={a.id} className={'doc-row' + (i === cursor ? ' cursor' : '') + (a.unread ? ' unread' : '')}
           onClick={() => { setCursor(i); onOpen(a.id); }}>
           <span className="doc-date">{publishedDate(a.published) || '日期未知'}</span>

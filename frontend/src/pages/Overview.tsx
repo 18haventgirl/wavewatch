@@ -1,4 +1,5 @@
-import {AlertTriangle, ArrowUpRight, Mail, RefreshCw} from 'lucide-react';
+import {ArrowUpRight} from 'lucide-react';
+import {IconBuoy, IconCalm, IconMail, IconRefresh} from '../icons';
 import {api, post, type Overview as OverviewData, type Source, type UpdateEvent} from '../api';
 import {ago, clock, countdown, interval} from '../format';
 import {useData, useNow} from '../hooks';
@@ -80,7 +81,7 @@ export default function Overview({onOpen, go}: {onOpen: (id: string) => void; go
         <h1>{headline}{active.length && !failing.length && data.healthy ? <span className="live-mark" aria-hidden="true"/> : null}</h1>
         <p>中国出口管制信息网，{active.length} 个栏目在监测{data.stats.never_checked ? `，${data.stats.never_checked} 篇正文待首次保存` : ''}</p>
       </div>
-      <Button variant="primary" icon={<RefreshCw size={16} className={checking ? 'spin' : ''}/>} busy={busy === 'all'}
+      <Button variant="primary" icon={<IconRefresh size={18} className={checking ? 'spin' : ''}/>} busy={busy === 'all'}
         onClick={() => run('all', async () => { await post('/check'); window.setTimeout(reload, 800); }, '已开始检查全部栏目')}>立即检查</Button>
     </header>
 
@@ -96,7 +97,7 @@ export default function Overview({onOpen, go}: {onOpen: (id: string) => void; go
       <button onClick={() => go('updates')}><b className={data.stats.unread ? 'accent' : ''}>{data.stats.unread}</b><span>未读</span></button>
       <button onClick={() => go('library')}><b>{data.stats.articles}</b><span>已收录文章</span></button>
       <button className="figure-mail" onClick={() => go('notify')}>
-        <Mail size={18}/><span>{data.email.ready ? `邮件已开启，发给 ${data.email.recipients} 人` : '邮件未开启'}
+        <IconMail size={26}/><span>{data.email.ready ? `邮件已开启，发给 ${data.email.recipients} 人` : '邮件未开启'}
           <small>{data.email.ready ? (data.email.last_sent ? `上次发送 ${clock(data.email.last_sent)}` : `每日 ${data.email.digest_time} 汇总`) : '点此设置'}</small></span>
       </button>
     </section>
@@ -105,11 +106,11 @@ export default function Overview({onOpen, go}: {onOpen: (id: string) => void; go
       <section className="glass panel">
         <div className="panel-head"><h2>最新动态</h2><button className="link" onClick={() => go('updates')}>全部动态<ArrowUpRight size={14}/></button></div>
         {data.recent.length ? <div className="event-list">{data.recent.map(e => <EventLine key={e.id} e={e} onOpen={onOpen}/>)}</div>
-          : <Empty title="还没有新动态">首次检查只建立基线，之后官网的新发布和修订会出现在这里。</Empty>}
+          : <Empty icon={<IconCalm size={26}/>} title="还没有新动态">首次检查只建立基线，之后官网的新发布和修订会出现在这里。</Empty>}
       </section>
       <section className={'glass panel attention' + (attention.length ? '' : ' calm')}>
         <div className="panel-head"><h2>需要注意</h2></div>
-        {attention.length ? <ul>{attention.map(a => <li key={a.key}><AlertTriangle size={16}/><span>{a.text}</span>
+        {attention.length ? <ul>{attention.map(a => <li key={a.key}><IconBuoy size={20}/><span>{a.text}</span>
           {a.action ? <button className="link" onClick={a.action}>{a.label}</button> : null}</li>)}</ul>
           : <p className="calm-note">一切正常。官网有变化时会{data.email.ready ? '发邮件并' : ''}显示在左侧。</p>}
         <dl className="mini-stats">

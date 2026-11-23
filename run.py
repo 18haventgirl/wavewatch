@@ -36,7 +36,7 @@ def ensure_port_free() -> None:
         try:
             sock.bind((config.HOST, config.PORT))
         except OSError:
-            raise SystemExit(f'端口 {config.PORT} 已被占用：观澜可能已经在运行。打开 {config.LOCAL_URL} 查看，或先运行 stop.ps1。')
+            raise SystemExit(f'端口 {config.PORT} 已被占用：Tidegaze THVS 可能已经在运行。打开 {config.LOCAL_URL} 查看，或先运行 stop.ps1。')
 
 
 def main() -> None:
@@ -52,7 +52,7 @@ def main() -> None:
     runtime.write_text(json.dumps({'pid': os.getpid(), 'python': sys.executable, 'url': config.LOCAL_URL}), encoding='utf-8')
     logging.getLogger('guanlan').info('starting on %s', config.LOCAL_URL)
     if not args.quiet:
-        print(f'观澜已启动：{config.LOCAL_URL}  （按 Ctrl+C 停止）', flush=True)
+        print(f'{config.APP_NAME} 已启动：{config.LOCAL_URL}  （按 Ctrl+C 停止）', flush=True)
     import uvicorn
     try:
         uvicorn.run('app.main:app', host=config.HOST, port=config.PORT, log_level='warning', ws='none',

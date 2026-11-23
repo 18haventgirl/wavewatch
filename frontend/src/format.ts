@@ -1,5 +1,7 @@
 import type {EventKind} from './api';
 
+export const APP_NAME = 'Tidegaze THVS';
+
 const tz = 'Asia/Shanghai';
 
 export function clock(ts: number | null | undefined, withDate = true): string {

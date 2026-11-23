@@ -103,7 +103,7 @@ class NotifyTest(DataTestCase):
         self.assertIsNotNone(email_id)
         self.assertIsNone(notify.queue_digest(now=tomorrow + 60))  # once per slot
         notify.deliver(now=tomorrow)
-        self.assertIn('观澜日报', self.outbox.sent[0]['subject'])
+        self.assertIn('日报】', self.outbox.sent[0]['subject'])
         self.assertIn('公告 101', self.outbox.sent[0]['text'])
 
     def test_empty_digest_is_skipped_by_default(self):

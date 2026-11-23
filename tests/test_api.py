@@ -97,7 +97,7 @@ class ApiTest(DataTestCase):
         self.assertEqual(ok.status_code, 200)
         self.assertNotIn('secret-code', ok.text)
         self.assertTrue(ok.json()['password_set'])
-        again = self.client.put('/api/email', json={'sender_name': '我的观澜'})
+        again = self.client.put('/api/email', json={'sender_name': '我的监测'})
         self.assertTrue(again.json()['password_set'])   # blank password keeps the saved one
 
     def test_runs_and_health(self):

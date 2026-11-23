@@ -36,7 +36,7 @@ async def lifespan(_app: FastAPI):
     worker.shutdown()
 
 
-app = FastAPI(title='观澜', lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(title=config.APP_NAME, lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
 
 @app.middleware('http')

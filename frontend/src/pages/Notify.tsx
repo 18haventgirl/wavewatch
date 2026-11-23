@@ -1,5 +1,6 @@
 import {useEffect, useMemo, useState} from 'react';
-import {Eye, Mail, MonitorCog, RotateCcw, Send, X} from 'lucide-react';
+import {Eye, MonitorCog, RotateCcw, Send, X} from 'lucide-react';
+import {IconMail} from '../icons';
 import {api, post, put, type Email, type EmailSettings, type Page, type Source, type SystemState} from '../api';
 import {clock} from '../format';
 import {useData} from '../hooks';
@@ -81,7 +82,7 @@ export default function NotifyPage({sources, go}: {sources: Source[]; go: (p: st
   const instantCols = sources.filter(s => s.notify === 'instant').map(s => s.name);
   const digestCols = sources.filter(s => s.notify === 'digest').map(s => s.name);
 
-  return <div className="page">
+  return <div className="page notify-page">
     <header className="page-head">
       <div><h1>邮件通知</h1><p>即时邮件和每日汇总都从这台电脑发出，需要一个可以用 SMTP 发信的邮箱。</p></div>
       <label className="inline-toggle big"><Toggle checked={form.enabled} label="开启邮件通知" disabled={busy === 'enable'}
@@ -142,12 +143,12 @@ export default function NotifyPage({sources, go}: {sources: Source[]; go: (p: st
       </div>
     </section>
 
-    <section className="glass panel">
+    <section className="glass panel outbox">
       <div className="panel-head"><h2>发送记录</h2>
         <Segmented label="发送状态" value={state} onChange={v => { setState(v); setPage(1); }}
           options={[{value: '', label: '全部'}, {value: 'pending', label: '等待'}, {value: 'sent', label: '已发送'}, {value: 'failed', label: '失败'}]}/></div>
       {outbox.error ? <ErrorNote message={outbox.error} onRetry={outbox.reload}/> : null}
-      {!outbox.data ? <Loading/> : !outbox.data.items.length ? <Empty icon={<Mail/>} title="还没有发送记录">开启邮件通知并发送测试邮件后，记录会出现在这里。</Empty> :
+      {!outbox.data ? <Loading/> : !outbox.data.items.length ? <Empty icon={<IconMail size={26}/>} title="还没有发送记录">开启邮件通知并发送测试邮件后，记录会出现在这里。</Empty> :
         <div className="mail-list">{outbox.data.items.map(m => <div key={m.id} className={'mail-row state-' + m.state}>
           <span className={'mail-kind kind-' + m.kind}>{kindName[m.kind]}</span>
           <span className="mail-main"><b>{m.subject}</b>
@@ -168,7 +169,7 @@ export default function NotifyPage({sources, go}: {sources: Source[]; go: (p: st
       {!system.data ? <Loading/> : <div className="system-rows">
         <label className="check-row"><Toggle checked={system.data.keep_awake} disabled={!system.data.keep_awake_supported}
           label="运行时阻止电脑自动睡眠" onChange={v => run('awake', async () => system.setData(await put<SystemState>('/system', {keep_awake: v})),
-            v ? '观澜运行时电脑不会自动睡眠' : '已恢复系统默认睡眠设置')}/>
+            v ? '程序运行时电脑不会自动睡眠' : '已恢复系统默认睡眠设置')}/>
           <span>运行时阻止电脑自动睡眠<small>睡眠期间无法检查。显示器仍会按设置关闭，手动睡眠和关机不受影响。</small></span></label>
         <label className="check-row"><Toggle checked={system.data.autostart} disabled={!system.data.autostart_supported}
           label="登录 Windows 后自动在后台启动" onChange={v => run('auto', async () => system.setData(await put<SystemState>('/system', {autostart: v})),

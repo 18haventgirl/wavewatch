@@ -36,7 +36,7 @@ DEFAULTS = {
     'username': '',
     'password': '',             # sealed with app.secret
     'sender': '',
-    'sender_name': '观澜监测',
+    'sender_name': config.APP_NAME,
     'recipients': [],
     'merge_minutes': 2,
     'digest_time': '18:00',
@@ -146,7 +146,7 @@ def _render_items(items: list[dict]) -> tuple[str, str]:
   {f'<div style="margin-top:8px">{excerpt}</div>' if excerpt else ''}
   <div style="margin-top:10px;font-size:13px">
     <a href="{html.escape(it['url'])}" style="color:#0a66d6;text-decoration:none">查看官网原文 →</a>
-    <a href="{local}" style="color:#6e7685;text-decoration:none;margin-left:14px">在观澜中查看</a></div>
+    <a href="{local}" style="color:#6e7685;text-decoration:none;margin-left:14px">在 {config.APP_NAME} 中查看</a></div>
 </td></tr>''')
     return '\n\n'.join(text_parts), ''.join(html_parts)
 
@@ -157,12 +157,12 @@ font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',san
 <table role="presentation" width="100%" style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:16px;
   border-collapse:separate;overflow:hidden;box-shadow:0 2px 10px rgba(15,30,60,.06)">
 <tr><td style="padding:22px 20px 14px;background:linear-gradient(135deg,#eaf3ff,#f6f0ff)">
-  <div style="font-size:12px;letter-spacing:.08em;color:#6e7685">观澜 · 中国出口管制信息网监测</div>
+  <div style="font-size:12px;letter-spacing:.08em;color:#6e7685">{config.APP_NAME} · 中国出口管制信息网监测</div>
   <div style="font-size:20px;font-weight:700;color:#1d1d1f;margin-top:4px">{html.escape(title)}</div>
   <div style="font-size:13px;color:#3a3f4a;margin-top:6px">{html.escape(intro)}</div></td></tr>
 {rows_html}
-<tr><td style="padding:14px 20px;font-size:12px;color:#8a919e">{footer or '此邮件由本机观澜监测服务自动发送。'}
-  <a href="{config.LOCAL_URL}" style="color:#8a919e">打开观澜</a></td></tr>
+<tr><td style="padding:14px 20px;font-size:12px;color:#8a919e">{footer or '此邮件由本机 ' + config.APP_NAME + ' 监测服务自动发送。'}
+  <a href="{config.LOCAL_URL}" style="color:#8a919e">打开 {config.APP_NAME}</a></td></tr>
 </table></body></html>'''
 
 
@@ -196,9 +196,9 @@ def queue_instant(now: float | None = None) -> int | None:
         text_body, rows_html = _render_items(items)
         first = items[0]
         if len(items) == 1:
-            subject = f"【观澜】{KIND_LABEL[first['kind']]}：{first['title']}"
+            subject = f"【{config.APP_NAME}】{KIND_LABEL[first['kind']]}：{first['title']}"
         else:
-            subject = f"【观澜】{len(items)} 条核心更新：{first['title']} 等"
+            subject = f"【{config.APP_NAME}】{len(items)} 条核心更新：{first['title']} 等"
         intro = f"{_bj(now, '%Y-%m-%d %H:%M')} 检测到 {len(items)} 条需要立即关注的更新。"
         email_id = _queue(conn, 'instant', subject[:200], intro + '\n\n' + text_body,
                           _wrap('核心栏目更新', intro, rows_html), settings['recipients'])
@@ -247,7 +247,7 @@ def queue_digest(now: float | None = None, *, force: bool = False) -> int | None
         text_body, rows_html = _render_items(items)
         health_html = (f'<tr><td style="padding:12px 20px;font-size:13px;color:{"#a1251b" if problems else "#1d6b35"}">'
                        f'{html.escape(health_text)}</td></tr>')
-        subject = f"【观澜日报】{day.month}月{day.day}日 · {head}"
+        subject = f"【{config.APP_NAME} 日报】{day.month}月{day.day}日 · {head}"
         email_id = _queue(conn, 'digest', subject[:200], intro + '\n' + health_text + '\n\n' + text_body,
                           _wrap('每日汇总', intro, health_html + rows_html), settings['recipients'])
         return email_id
@@ -262,13 +262,13 @@ def queue_alerts(now: float | None = None) -> list[int]:
             return queued
         for src in db.rows(conn, 'SELECT * FROM sources WHERE configured=1 AND enabled=1'):
             if src['fail_count'] >= settings['alert_failures'] and not src['alerted_at']:
-                subject = f"【观澜提醒】{src['name']} 连续 {src['fail_count']} 次检查失败"
+                subject = f"【{config.APP_NAME} 提醒】{src['name']} 连续 {src['fail_count']} 次检查失败"
                 body = (f"栏目「{src['name']}」最近 {src['fail_count']} 次检查都没有成功。\n原因：{src['error']}\n"
                         f"最后一次成功：{_bj(src['last_success'], '%Y-%m-%d %H:%M')}\n恢复正常后会再发一封邮件。")
                 queued.append(_queue(conn, 'alert', subject, body, _wrap(subject, body, ''), settings['recipients']))
                 conn.execute('UPDATE sources SET alerted_at=? WHERE id=?', (now, src['id']))
             elif src['alerted_at'] and src['fail_count'] == 0:
-                subject = f"【观澜提醒】{src['name']} 已恢复正常"
+                subject = f"【{config.APP_NAME} 提醒】{src['name']} 已恢复正常"
                 body = f"栏目「{src['name']}」已于 {_bj(src['last_success'], '%m-%d %H:%M')} 恢复检查。"
                 queued.append(_queue(conn, 'alert', subject, body, _wrap(subject, body, ''), settings['recipients']))
                 conn.execute('UPDATE sources SET alerted_at=NULL WHERE id=?', (src['id'],))
@@ -284,7 +284,7 @@ def send(settings: dict, subject: str, text_body: str, html_body: str, recipient
     msg = EmailMessage()
     sender = settings['sender'] or settings['username']
     msg['Subject'] = subject
-    msg['From'] = formataddr((settings['sender_name'] or '观澜监测', sender))
+    msg['From'] = formataddr((settings['sender_name'] or config.APP_NAME, sender))
     msg['To'] = ', '.join(recipients)
     msg['Message-ID'] = make_msgid(domain=sender.split('@')[-1] if '@' in sender else 'guanlan.local')
     msg.set_content(text_body)
@@ -354,7 +354,7 @@ def send_test(settings_override: dict | None = None) -> dict:
         settings = {**load(conn), **(settings_override or {})}
     if not settings['host'] or not settings['recipients']:
         return {'ok': False, 'error': '请先填写邮件服务器和收件人'}
-    subject = '【观澜】测试邮件'
+    subject = f'【{config.APP_NAME}】测试邮件'
     body = f"这是一封测试邮件，发送于 {_bj(time.time(), '%Y-%m-%d %H:%M:%S')}（北京时间）。收到即表示邮件通知配置正确。"
     try:
         send(settings, subject, body, _wrap('测试邮件', body, ''), settings['recipients'])

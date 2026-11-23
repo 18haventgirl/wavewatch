@@ -1,5 +1,6 @@
 import {useEffect, useMemo, useState} from 'react';
-import {CheckCheck, Circle, Inbox, Search, X} from 'lucide-react';
+import {CheckCheck, Circle, Search, X} from 'lucide-react';
+import {IconCalm} from '../icons';
 import {api, post, type Page, type Source, type UpdateEvent} from '../api';
 import {clock, dayLabel, publishedDate} from '../format';
 import {useData, useHotkeys} from '../hooks';
@@ -69,7 +70,7 @@ export default function Updates({onOpen, sources, refreshKey}: {onOpen: (id: str
 
     {error ? <ErrorNote message={error} onRetry={reload}/> : null}
     <section className="glass panel timeline" aria-busy={loading}>
-      {!data ? <Loading/> : !items.length ? <Empty icon={<Inbox/>} title={unread ? '没有未读动态' : '没有符合条件的动态'}>
+      {!data ? <Loading/> : !items.length ? <Empty icon={<IconCalm size={26}/>} title={unread ? '没有未读动态' : '没有符合条件的动态'}>
         {unread ? '全部看完了。' : '换个筛选条件，或等待下次检查发现变化。'}</Empty> :
         groups.map(g => <div key={g.day} className="day-group">
           <h3 className="day">{g.day}</h3>

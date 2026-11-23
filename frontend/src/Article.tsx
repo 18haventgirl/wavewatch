@@ -1,5 +1,6 @@
 import {useEffect, useMemo, useRef, useState, type ReactNode} from 'react';
-import {Download, ExternalLink, FileText, Layers, Paperclip, RefreshCw, X} from 'lucide-react';
+import {Download, ExternalLink, X} from 'lucide-react';
+import {IconFile, IconRefresh, IconVersions} from './icons';
 import {api, post, type ArticleDetail, type Compare, type DiffRow, type Version} from './api';
 import {ago, bytes, clock, fullTime, kindLabel} from './format';
 import {useData, useHotkeys} from './hooks';
@@ -95,7 +96,7 @@ export default function Article({id, onClose, onOpen, onChanged}: {id: string; o
         {data.parents.length ? <p className="muted small">所属文章：{data.parents.map(p => <button key={p.id} className="link" onClick={() => onOpen(p.id)}>{p.title}</button>)}</p> : null}
         <div className="sheet-actions">
           <a className="btn btn-primary" href={data.url} target="_blank" rel="noreferrer"><ExternalLink size={16}/>打开官网原文</a>
-          <Button icon={<RefreshCw size={15}/>} busy={busy === 'check'} onClick={() => run('check', async () => {
+          <Button icon={<IconRefresh size={17}/>} busy={busy === 'check'} onClick={() => run('check', async () => {
             await post(`/articles/${id}/check`); window.setTimeout(reload, 4000);
           }, '已加入复查，几秒后刷新')}>立即复查</Button>
           {data.events.length ? <Button variant="quiet" onClick={() => run('read', async () => {
@@ -121,11 +122,11 @@ export default function Article({id, onClose, onOpen, onChanged}: {id: string; o
             </div>
             <article className="reading">{body.split('\n').map((line, i) => line.startsWith('[图片]')
               ? <p key={i} className="figure-note">{line}</p> : <p key={i}>{line}</p>)}</article>
-          </> : <Empty icon={<FileText/>} title="正文还没有保存">发现后会尽快读取正文；可以点“立即复查”。</Empty>}
+          </> : <Empty icon={<IconFile size={26}/>} title="正文还没有保存">发现后会尽快读取正文；可以点“立即复查”。</Empty>}
         </div> : null}
 
         {tab === 'diff' ? <div className="tab-body">
-          {data.versions.length < 2 ? <Empty icon={<Layers/>} title="还没有修订">目前只有基线版本。官网修改正文、标题或附件后，这里会并排显示前后差异。</Empty> : <>
+          {data.versions.length < 2 ? <Empty icon={<IconVersions size={26}/>} title="还没有修订">目前只有基线版本。官网修改正文、标题或附件后，这里会并排显示前后差异。</Empty> : <>
             <div className="version-bar">
               <label>旧版本 <select value={base ?? diff?.base ?? ''} onChange={e => setBase(Number(e.target.value))}>
                 {data.versions.slice(1).map((v, i) => <option key={v.id} value={v.id}>{versionLabel(v, i + 1)}</option>)}</select></label>
@@ -139,12 +140,12 @@ export default function Article({id, onClose, onOpen, onChanged}: {id: string; o
 
         {tab === 'files' ? <div className="tab-body">
           {data.attachments.length ? <div className="file-list">{data.attachments.map(a => <div key={a.id} className="file-row">
-            <Paperclip size={18}/>
+            <IconFile size={20}/>
             <button className="file-main" onClick={() => onOpen(a.id)}><b>{a.title}</b>
               <small>{a.versions} 个版本{a.bytes ? `，${bytes(a.bytes)}` : ''}{a.last_check ? `，复查于 ${ago(a.last_check)}` : '，待下载'}{a.check_error ? `，${a.check_error}` : ''}</small></button>
             {a.file_digest ? <a className="icon-btn" href={`/api/files/${a.file_digest}`} aria-label="下载"><Download size={17}/></a> : null}
             <a className="icon-btn" href={a.url} target="_blank" rel="noreferrer" aria-label="打开官网文件"><ExternalLink size={16}/></a>
-          </div>)}</div> : <Empty icon={<Paperclip/>} title="没有附件">正文中出现附件链接时会自动下载并跟踪变化。</Empty>}
+          </div>)}</div> : <Empty icon={<IconFile size={26}/>} title="没有附件">正文中出现附件链接时会自动下载并跟踪变化。</Empty>}
         </div> : null}
 
         {tab === 'log' ? <div className="tab-body">

@@ -1,5 +1,6 @@
 import {useState} from 'react';
-import {Activity, AlertCircle} from 'lucide-react';
+import {AlertCircle} from 'lucide-react';
+import {IconRuns} from '../icons';
 import {api, type Run, type Source} from '../api';
 import {ago, clock, fullTime} from '../format';
 import {useData} from '../hooks';
@@ -37,7 +38,7 @@ export default function Runs({sources, onOpen, refreshKey}: {sources: Source[]; 
     </section> : null}
 
     <section className="glass panel">
-      {!data ? <Loading/> : !data.items.length ? <Empty icon={<Activity/>} title="没有符合条件的记录">
+      {!data ? <Loading/> : !data.items.length ? <Empty icon={<IconRuns size={26}/>} title="没有符合条件的记录">
         {important ? '关闭“隐藏无变化的快速检查”可以看到每一次检查。' : '服务启动后，检查记录会出现在这里。'}</Empty> :
         <div className="run-list">{data.items.map(r => <div key={r.id} className="run-row">
           <Dot tone={tone(r.state)}/>

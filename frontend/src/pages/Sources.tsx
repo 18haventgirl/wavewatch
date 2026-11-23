@@ -1,4 +1,5 @@
-import {ExternalLink, RefreshCw, ScanSearch} from 'lucide-react';
+import {ExternalLink, ScanSearch} from 'lucide-react';
+import {IconRefresh} from '../icons';
 import {patch, post, type Notify, type Source} from '../api';
 import {ago, clock, countdown, notifyLabel} from '../format';
 import {useNow} from '../hooks';
@@ -59,7 +60,7 @@ function SourceRow({s, onChange, now}: {s: Source; onChange: (s: Source) => void
     </dl>
 
     <footer>
-      <Button small icon={<RefreshCw size={14}/>} busy={busy === 'quick'} disabled={!s.enabled} onClick={() => check(false)}>立即检查</Button>
+      <Button small icon={<IconRefresh size={16}/>} busy={busy === 'quick'} disabled={!s.enabled} onClick={() => check(false)}>立即检查</Button>
       <Button small variant="quiet" icon={<ScanSearch size={14}/>} busy={busy === 'full'} disabled={!s.enabled} onClick={() => check(true)}
         title="重新读取全部分页，核对是否有遗漏">完整核对</Button>
     </footer>

@@ -9,6 +9,8 @@ import os
 from datetime import timedelta, timezone
 from pathlib import Path
 
+APP_NAME = 'Tidegaze THVS'   # shown in the UI and in e-mails
+
 ROOT = Path(__file__).resolve().parents[1]
 DATA = Path(os.getenv('GUANLAN_DATA', ROOT / 'data'))
 DB_PATH = DATA / 'guanlan.sqlite3'
