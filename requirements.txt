@@ -1,7 +1,8 @@
+# Direct dependencies.  Exact versions for installation are in requirements.lock.txt.
 fastapi>=0.115,<1
 uvicorn>=0.30,<1
 httpx>=0.28,<1
 beautifulsoup4>=4.13,<5
-changedetection.io==0.70.4
 pypdf>=5,<7
 truststore>=0.10,<1
+psutil>=5.9

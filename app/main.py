@@ -1,177 +1,619 @@
+"""HTTP API and static front end.  Listens on 127.0.0.1 only."""
 from __future__ import annotations
-from contextlib import asynccontextmanager
-import difflib
+
 import json
+import logging
 import re
 import time
-from pathlib import Path
+from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import Literal
 from urllib.parse import urlsplit
-from fastapi import FastAPI,HTTPException,Request
-from fastapi.responses import FileResponse,JSONResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel,Field
-from . import db,engine,service
 
-SCOPE="EXISTS(SELECT 1 FROM article_sources sm JOIN sources ss ON ss.id=sm.source_id WHERE sm.article_id=a.id AND ss.in_scope=1)"
-UNREAD="EXISTS(SELECT 1 FROM events e WHERE e.unread=1 AND (e.article_id=a.id OR EXISTS(SELECT 1 FROM article_attachments aa WHERE aa.parent_id=a.id AND aa.attachment_id=e.article_id)))"
-CHANGED="EXISTS(SELECT 1 FROM events e WHERE e.kind='changed' AND (e.article_id=a.id OR EXISTS(SELECT 1 FROM article_attachments aa WHERE aa.parent_id=a.id AND aa.attachment_id=e.article_id)))"
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field, field_validator
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+from . import config, db, diffing, files, legacy, monitor, notify, power, worker
+
+log = logging.getLogger('guanlan.api')
+STARTED = time.time()
 
 
 @asynccontextmanager
-async def lifespan(app):
-    db.init();threads=service.start()
+async def lifespan(_app: FastAPI):
+    if db.init():
+        legacy.maybe_import()
+    if not getattr(_app.state, 'no_workers', False):
+        worker.start()
     yield
-    service.stop.set()
-    for thread in threads:thread.join(timeout=2)
+    worker.shutdown()
 
 
-app=FastAPI(title='观澜 · 中国出口管制政策监测',lifespan=lifespan,docs_url=None,redoc_url=None)
+app = FastAPI(title='观澜', lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
 
 @app.middleware('http')
-async def local_only(request:Request,call_next):
-    if request.url.hostname not in ('127.0.0.1','localhost','testserver'):return JSONResponse({'detail':'仅允许本机访问'},status_code=403)
-    origin=request.headers.get('origin')
-    if request.method not in ('GET','HEAD','OPTIONS') and origin and urlsplit(origin).netloc!=request.url.netloc:return JSONResponse({'detail':'请求来源不符'},status_code=403)
-    response=await call_next(request)
-    response.headers['X-Content-Type-Options']='nosniff';response.headers['Referrer-Policy']='no-referrer'
+async def local_only(request: Request, call_next):
+    # Reject anything not addressed to this machine (also blocks DNS-rebinding),
+    # and cross-site writes from other pages open in the browser.
+    if request.url.hostname not in ('127.0.0.1', 'localhost', 'testserver'):
+        return JSONResponse({'detail': '仅允许本机访问'}, status_code=403)
+    origin = request.headers.get('origin')
+    if request.method not in ('GET', 'HEAD', 'OPTIONS') and origin and urlsplit(origin).netloc != request.url.netloc:
+        return JSONResponse({'detail': '请求来源不符'}, status_code=403)
+    response = await call_next(request)
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Referrer-Policy'] = 'no-referrer'
+    response.headers['X-Frame-Options'] = 'DENY'
     return response
 
 
-def scope_info(conn):
-    categories=[dict(r) for r in conn.execute('SELECT c.id,c.name,c.external_code,parent.id AS parent_id,parent.name AS parent_name,json_extract(s.config,\'$.role\') AS role,s.id AS source_id,(SELECT count(*) FROM article_sources m JOIN articles a ON a.id=m.article_id WHERE m.source_id=s.id AND a.kind=\'article\') AS articles FROM categories c JOIN sources s ON s.category_id=c.id LEFT JOIN categories parent ON parent.id=c.parent_id WHERE s.in_scope=1 ORDER BY parent.position,c.position')]
-    return {'country':'中国','country_code':'CN','publisher':'中国出口管制信息网','categories':categories,'archived_sources':conn.execute('SELECT count(*) FROM sources WHERE in_scope=0').fetchone()[0]}
+def bj_midnight(now: float) -> float:
+    local = datetime.fromtimestamp(now, config.BEIJING)
+    return local.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
 
 
-@app.get('/api/taxonomy')
-def taxonomy():
-    with db.connection() as conn:return scope_info(conn)
+def column_map(conn, ids: list[str]) -> dict[str, list[dict]]:
+    if not ids:
+        return {}
+    marks = ','.join('?' * len(ids))
+    out: dict[str, list[dict]] = {i: [] for i in ids}
+    for r in conn.execute(f'''SELECT DISTINCT e.article_id, s.id, s.name, s.role, s.grp, s.position
+                              FROM entries e JOIN sources s ON s.id=e.source_id
+                              WHERE e.article_id IN ({marks}) AND s.configured=1 ORDER BY s.position''', ids):
+        out[r['article_id']].append({'id': r['id'], 'name': r['name'], 'role': r['role'], 'group': r['grp']})
+    # Attachments inherit the columns of the articles that link them.
+    for r in conn.execute(f'''SELECT DISTINCT l.attachment_id, s.id, s.name, s.role, s.grp, s.position
+                              FROM links l JOIN entries e ON e.article_id=l.parent_id JOIN sources s ON s.id=e.source_id
+                              WHERE l.attachment_id IN ({marks}) AND s.configured=1 ORDER BY s.position''', ids):
+        if not any(c['id'] == r['id'] for c in out[r['attachment_id']]):
+            out[r['attachment_id']].append({'id': r['id'], 'name': r['name'], 'role': r['role'], 'group': r['grp']})
+    return out
 
 
-@app.get('/api/dashboard')
-def dashboard():
-    with db.connection() as conn:
-        sources=[]
-        for row in conn.execute('SELECT s.*,c.name AS category_name,c.external_code,parent.name AS parent_category,p.name AS publisher,co.name AS country,co.code AS country_code FROM sources s JOIN categories c ON c.id=s.category_id LEFT JOIN categories parent ON parent.id=c.parent_id JOIN publishers p ON p.id=s.publisher_id JOIN countries co ON co.code=p.country_code WHERE s.in_scope=1 ORDER BY parent.position,c.position'):
-            s=dict(row);config=json.loads(s.pop('config'));s.update(group=s['country'],url=config['url'],role=config['role'])
-            s['articles']=conn.execute("SELECT count(*) FROM article_sources m JOIN articles a ON a.id=m.article_id WHERE m.source_id=? AND a.kind='article'",(s['id'],)).fetchone()[0]
-            s['verified']=conn.execute("SELECT count(*) FROM article_sources m JOIN articles a ON a.id=m.article_id WHERE m.source_id=? AND a.kind='article' AND EXISTS(SELECT 1 FROM versions v WHERE v.article_id=a.id)",(s['id'],)).fetchone()[0]
-            latest=conn.execute('SELECT details FROM runs WHERE source_id=? AND state=\'success\' ORDER BY id DESC LIMIT 1',(s['id'],)).fetchone()
-            s['crawl']=json.loads(latest['details']) if latest and latest['details'] else None
-            sources.append(s)
-        base=" FROM articles a WHERE a.kind='article' AND "+SCOPE
-        stats={'articles':conn.execute('SELECT count(*)'+base).fetchone()[0],
-               'unread':conn.execute('SELECT count(*)'+base+' AND '+UNREAD).fetchone()[0],
-               'revisions':conn.execute('SELECT count(*) FROM events e WHERE kind=\'changed\' AND EXISTS(SELECT 1 FROM articles a WHERE a.id=e.article_id AND '+SCOPE+')').fetchone()[0]}
-        runs=[dict(x) for x in conn.execute('SELECT r.*,s.name,co.name AS "group" FROM runs r JOIN sources s ON s.id=r.source_id JOIN publishers p ON p.id=s.publisher_id JOIN countries co ON co.code=p.country_code WHERE s.in_scope=1 ORDER BY r.id DESC LIMIT 100')]
-        scope=scope_info(conn)
-    return {'sources':sources,'scope':scope,'stats':stats,'runs':runs,'engine':engine.health(),'now':time.time()}
+# --- overview ------------------------------------------------------------------------------------
 
-
-def decorate(conn,row):
-    item=dict(row);locations=db.locations(conn,item['id'])
-    item.update(locations=locations,categories=[{'id':x['category_id'],'name':x['category_name'],'parent_name':x['parent_category'],'role':x['role'],'source_id':x['source_id']} for x in locations],source_id=locations[0]['source_id'] if locations else item.get('origin_source_id'),source_name=locations[0]['source_name'] if locations else '来源待核实',region=locations[0]['country'] if locations else '中国')
-    return item
-
-
-@app.get('/api/articles')
-def articles(q:str='',group:str='',category:str='',unread:bool=False,kind:str='',page:int=1):
-    where=["a.kind='article'",SCOPE];args=[]
-    if q:where.append('(a.title LIKE ? OR a.description LIKE ?)');args.extend(['%'+q[:200]+'%']*2)
-    if group and group!='中国':where.append('0')
-    if category:
-        where.append('EXISTS(SELECT 1 FROM article_sources cm JOIN sources cs ON cs.id=cm.source_id WHERE cm.article_id=a.id AND cs.in_scope=1 AND cs.category_id=?)');args.append(category)
-    if unread:where.append(UNREAD)
-    if kind=='changed':where.append(CHANGED)
-    base=' FROM articles a WHERE '+' AND '.join(where)
-    position_select='';select_args=[];order="COALESCE(a.published,'') DESC,a.discovered DESC,a.id"
-    if category:
-        position_select=",(SELECT MIN(se.source_position) FROM source_entries se JOIN sources os ON os.id=se.source_id WHERE se.article_id=a.id AND os.in_scope=1 AND os.category_id=?) AS source_position"
-        select_args=[category]
-        order="source_position IS NULL,source_position,a.id"
-    with db.connection() as conn:
-        total=conn.execute('SELECT count(*)'+base,args).fetchone()[0]
-        rows=conn.execute('SELECT a.*'+position_select+',(SELECT count(*) FROM versions v WHERE v.article_id=a.id) AS version_count,('+UNREAD+') AS unread,('+CHANGED+') AS changes'+base+' ORDER BY '+order+' LIMIT 20 OFFSET ?',select_args+args+[max(0,page-1)*20]).fetchall()
-        items=[decorate(conn,r) for r in rows]
-    return {'items':items,'total':total,'page':page}
-
-
-@app.get('/api/articles/{aid}')
-def article(aid:str):
-    with db.connection() as conn:
-        row=conn.execute('SELECT a.* FROM articles a WHERE a.id=? AND '+SCOPE,(aid,)).fetchone()
-        if not row:raise HTTPException(404,'信息不在当前监测范围内')
-        result=decorate(conn,row)
-        versions=[dict(x) for x in conn.execute('SELECT v.*,fv.blob_digest,b.bytes FROM versions v LEFT JOIN file_versions fv ON fv.version_id=v.id LEFT JOIN file_blobs b ON b.digest=fv.blob_digest WHERE article_id=? ORDER BY v.id DESC LIMIT 30',(aid,))]
-        children=[decorate(conn,x) for x in conn.execute('SELECT a.*,(SELECT count(*) FROM versions v WHERE v.article_id=a.id) AS version_count FROM articles a JOIN article_attachments aa ON aa.attachment_id=a.id WHERE aa.parent_id=?',(aid,))]
-        result.update(versions=versions,attachments=children,has_saved_file=any(x['blob_digest'] for x in versions))
-        result['diff']=list(difflib.unified_diff(versions[1]['content'].splitlines(),versions[0]['content'].splitlines(),fromfile='上一个版本',tofile='当前版本',lineterm='')) if len(versions)>1 else []
+@app.get('/api/overview')
+def overview():
+    now = time.time()
+    today = bj_midnight(now)
+    with db.tx() as conn:
+        stats = {
+            'articles': conn.execute("SELECT COUNT(*) FROM articles WHERE kind='article'").fetchone()[0],
+            'attachments': conn.execute("SELECT COUNT(*) FROM articles WHERE kind='attachment'").fetchone()[0],
+            'unread': conn.execute('SELECT COUNT(DISTINCT article_id) FROM events WHERE read_at IS NULL').fetchone()[0],
+            'today_new': conn.execute("SELECT COUNT(*) FROM events WHERE kind='new' AND created>=?", (today,)).fetchone()[0],
+            'today_changed': conn.execute("SELECT COUNT(*) FROM events WHERE kind!='new' AND created>=?", (today,)).fetchone()[0],
+            'week_events': conn.execute('SELECT COUNT(*) FROM events WHERE created>=?', (now - 7 * 86400,)).fetchone()[0],
+            'check_errors': conn.execute(f"SELECT COUNT(*) FROM articles a WHERE check_error!='' AND {monitor.ACTIVE_ARTICLE}").fetchone()[0],
+            'due': conn.execute(f'SELECT COUNT(*) FROM articles a WHERE next_check<=? AND {monitor.ACTIVE_ARTICLE}', (now,)).fetchone()[0],
+            'never_checked': conn.execute(f'SELECT COUNT(*) FROM articles a WHERE last_check IS NULL AND {monitor.ACTIVE_ARTICLE}').fetchone()[0],
+        }
+        settings = notify.load(conn)
+        email = {
+            'enabled': settings['enabled'], 'ready': notify.ready(settings), 'recipients': len(settings['recipients']),
+            'digest_time': settings['digest_time'],
+            'pending': conn.execute("SELECT COUNT(*) FROM emails WHERE state='pending'").fetchone()[0],
+            'failed': conn.execute("SELECT COUNT(*) FROM emails WHERE state='failed' AND created>=?", (now - 86400,)).fetchone()[0],
+            'last_sent': conn.execute("SELECT MAX(sent_at) FROM emails WHERE state='sent'").fetchone()[0],
+            'last_error': (db.row(conn, "SELECT last_error FROM emails WHERE last_error!='' ORDER BY id DESC LIMIT 1") or {}).get('last_error', ''),
+        }
+        result = {
+            'now': now, 'started': STARTED, 'stats': stats, 'email': email,
+            'sources': list_sources(conn),
+            'recent': event_rows(conn, 'WHERE 1', [], 8, 0),
+            'workers': worker.status, 'healthy': worker.healthy(),
+            'import': db.get_setting(conn, 'legacy_import'),
+        }
     return result
 
 
-@app.post('/api/articles/{aid}/read')
-def mark_read(aid:str):
-    with db.connection() as conn:
-        if not conn.execute('SELECT a.id FROM articles a WHERE a.id=? AND '+SCOPE,(aid,)).fetchone():raise HTTPException(404,'信息不在当前监测范围内')
-        conn.execute('UPDATE events SET unread=0 WHERE article_id=? OR article_id IN (SELECT attachment_id FROM article_attachments WHERE parent_id=?)',(aid,aid))
-    return {'ok':True}
+# --- columns -------------------------------------------------------------------------------------
+
+def list_sources(conn) -> list[dict]:
+    sources = db.rows(conn, 'SELECT * FROM sources WHERE configured=1 ORDER BY position')
+    for s in sources:
+        s['page_url'] = config.source_page_url(s['column_id'])
+        s['articles'] = conn.execute('SELECT COUNT(DISTINCT article_id) FROM entries WHERE source_id=?', (s['id'],)).fetchone()[0]
+        s['unread'] = conn.execute('''SELECT COUNT(DISTINCT ev.article_id) FROM events ev
+                                      WHERE ev.read_at IS NULL AND ev.article_id IN (SELECT article_id FROM entries WHERE source_id=?)''',
+                                   (s['id'],)).fetchone()[0]
+        s['last_run'] = db.row(conn, 'SELECT * FROM runs WHERE source_id=? ORDER BY id DESC LIMIT 1', (s['id'],))
+        s['last_added'] = db.row(conn, "SELECT MAX(finished) AS at, SUM(added) AS total FROM runs WHERE source_id=? AND added>0",
+                                 (s['id'],))
+    return sources
 
 
-@app.post('/api/read-all')
-def read_all():
-    with db.connection() as conn:conn.execute('UPDATE events SET unread=0 WHERE article_id IN (SELECT a.id FROM articles a WHERE '+SCOPE+')')
-    return {'ok':True}
+@app.get('/api/sources')
+def sources():
+    with db.tx() as conn:
+        return list_sources(conn)
 
 
-@app.get('/api/attachments/{aid}/download')
-def download_attachment(aid:str):
-    with db.connection() as conn:
-        article=conn.execute('SELECT a.* FROM articles a WHERE a.id=? AND '+SCOPE,(aid,)).fetchone()
-        blob=conn.execute('SELECT b.path FROM file_versions f JOIN versions v ON v.id=f.version_id JOIN file_blobs b ON b.digest=f.blob_digest WHERE v.article_id=? ORDER BY v.id DESC LIMIT 1',(aid,)).fetchone()
-    if not article or not blob:raise HTTPException(404,'附件尚未完成本机保存')
-    file=Path(blob['path']).resolve()
-    if file.parent!=(db.DATA/'attachments').resolve() or not file.is_file():raise HTTPException(404,'保存文件不可用')
-    return FileResponse(file,filename=re.sub(r'[<>:"/\\|?*]','_',article['title'])[:180],media_type='application/octet-stream')
+class SourcePatch(BaseModel):
+    enabled: bool | None = None
+    list_minutes: int | None = Field(None, ge=1, le=1440)
+    article_hours: int | None = Field(None, ge=1, le=168)
+    notify: Literal['instant', 'digest', 'off'] | None = None
+
+
+@app.patch('/api/sources/{source_id}')
+def update_source(source_id: str, patch: SourcePatch):
+    changes = patch.model_dump(exclude_none=True)
+    with db.tx() as conn:
+        src = db.row(conn, 'SELECT * FROM sources WHERE id=? AND configured=1', (source_id,))
+        if not src:
+            raise HTTPException(404, '栏目不存在')
+        if changes:
+            conn.execute(f"UPDATE sources SET {', '.join(k + '=?' for k in changes)} WHERE id=?",
+                         [int(v) if isinstance(v, bool) else v for v in changes.values()] + [source_id])
+        now = time.time()
+        if 'list_minutes' in changes or (changes.get('enabled') and not src['enabled']):
+            soon = now if changes.get('enabled') and not src['enabled'] else now + changes.get('list_minutes', src['list_minutes']) * 60
+            conn.execute('UPDATE sources SET next_check=MIN(next_check, ?) WHERE id=?', (soon, source_id))
+        if 'article_hours' in changes:
+            # Bring forward articles whose next check is now later than the new interval allows.
+            conn.execute('''UPDATE articles SET next_check=MIN(next_check, COALESCE(last_check, 0) + ?)
+                            WHERE id IN (SELECT article_id FROM entries WHERE source_id=?)''',
+                         (changes['article_hours'] * 3600, source_id))
+        result = next(s for s in list_sources(conn) if s['id'] == source_id)
+    worker.wake_lists.set()
+    worker.wake_content.set()
+    return result
+
+
+class CheckRequest(BaseModel):
+    full: bool = False
+
+
+@app.post('/api/sources/{source_id}/check')
+def check_source(source_id: str, body: CheckRequest = CheckRequest()):
+    if not monitor.request_source(source_id, body.full):
+        raise HTTPException(404, '栏目不存在')
+    worker.wake_lists.set()
+    return {'ok': True}
 
 
 @app.post('/api/check')
-def check_all():
-    with db.connection() as conn:ids=[x['id'] for x in conn.execute('SELECT id FROM sources WHERE in_scope=1 AND paused=0')]
-    return {'queued':sum(int(service.check_source(sid)) for sid in ids)}
+def check_all(body: CheckRequest = CheckRequest()):
+    with db.tx() as conn:
+        ids = [r[0] for r in conn.execute('SELECT id FROM sources WHERE configured=1 AND enabled=1')]
+    for source_id in ids:
+        monitor.request_source(source_id, body.full)
+    worker.wake_lists.set()
+    return {'queued': len(ids)}
 
 
-class SourceSettings(BaseModel):
-    paused:bool
-    hours:int=Field(ge=1,le=168)
+@app.get('/api/runs')
+def runs(source: str = '', state: str = '', changes_only: bool = False, page: int = 1, size: int = 50):
+    size = max(1, min(size, 200))
+    where, args = ['1'], []
+    if source:
+        where.append('r.source_id=?')
+        args.append(source)
+    if state in ('ok', 'error', 'running', 'interrupted'):
+        where.append('r.state=?')
+        args.append(state)
+    if changes_only:
+        where.append("(r.added>0 OR r.state!='ok' OR r.mode='full')")
+    clause = ' AND '.join(where)
+    with db.tx() as conn:
+        total = conn.execute(f'SELECT COUNT(*) FROM runs r WHERE {clause}', args).fetchone()[0]
+        items = db.rows(conn, f'''SELECT r.*, s.name FROM runs r JOIN sources s ON s.id=r.source_id
+                                  WHERE {clause} ORDER BY r.id DESC LIMIT ? OFFSET ?''', args + [size, (max(page, 1) - 1) * size])
+        problems = db.rows(conn, f'''SELECT a.id, a.title, a.url, a.check_error, a.fail_count, a.last_check, a.next_check
+                                     FROM articles a WHERE a.check_error!='' AND {monitor.ACTIVE_ARTICLE}
+                                     ORDER BY a.fail_count DESC LIMIT 50''')
+    return {'items': items, 'total': total, 'page': page, 'size': size, 'article_errors': problems}
 
 
-@app.put('/api/sources/{sid}')
-def update_source(sid:str,settings:SourceSettings):
-    with db.connection() as conn:
-        row=conn.execute('SELECT * FROM sources WHERE id=? AND in_scope=1',(sid,)).fetchone()
-        if not row:raise HTTPException(404,'来源不在当前监测范围内')
-        conn.execute('UPDATE sources SET paused=?,hours=?,next_check=? WHERE id=?',(int(settings.paused),settings.hours,time.time() if not settings.paused and row['paused'] else time.time()+settings.hours*3600,sid))
-        watches=conn.execute('''SELECT a.watch_id,MIN(s.paused) AS paused,MIN(CASE WHEN s.paused=0 THEN s.hours END) AS hours FROM articles a JOIN article_sources m ON m.article_id=a.id JOIN sources s ON s.id=m.source_id WHERE s.in_scope=1 AND a.watch_id IS NOT NULL AND EXISTS(SELECT 1 FROM article_sources x WHERE x.article_id=a.id AND x.source_id=?) GROUP BY a.watch_id''',(sid,)).fetchall()
-        for watch in watches:
-            payload={'paused':bool(watch['paused']),'time_between_check':{'hours':watch['hours'] or settings.hours},'time_between_check_use_default':False}
-            conn.execute('INSERT INTO metadata(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',('control:'+watch['watch_id'],json.dumps(payload)))
-    return {'ok':True,'pending_watches':len(watches)}
+# --- events (updates) -------------------------------------------------------------------------------
+
+def event_rows(conn, where: str, args: list, limit: int, offset: int) -> list[dict]:
+    items = db.rows(conn, f'''
+        SELECT e.id, e.kind, e.created, e.summary, e.read_at, e.route, e.email_id, e.version_id,
+               a.id AS article_id, a.title, a.url, a.published, a.kind AS article_kind,
+               c.id AS attachment_id, c.title AS attachment_title
+        FROM events e JOIN articles a ON a.id=e.article_id LEFT JOIN articles c ON c.id=e.attachment_id
+        {where} ORDER BY e.created DESC, e.id DESC LIMIT ? OFFSET ?''', args + [limit, offset])
+    columns = column_map(conn, list({i['article_id'] for i in items}))
+    for item in items:
+        item['columns'] = columns.get(item['article_id'], [])
+    return items
 
 
-@app.post('/api/sources/{sid}/check')
-def check_one(sid:str):
-    with db.connection() as conn:row=conn.execute('SELECT paused FROM sources WHERE id=? AND in_scope=1',(sid,)).fetchone()
-    if not row:raise HTTPException(404,'来源不在当前监测范围内')
-    if row['paused']:raise HTTPException(409,'请先恢复该来源')
-    return {'queued':service.check_source(sid)}
+@app.get('/api/events')
+def events(kind: str = '', source: str = '', unread: bool = False, q: str = '', page: int = 1, size: int = 30):
+    size = max(1, min(size, 100))
+    where, args = ['1'], []
+    if kind == 'changes':
+        where.append("e.kind!='new'")
+    elif kind in ('new', 'changed', 'attachment_new', 'attachment_changed'):
+        where.append('e.kind=?')
+        args.append(kind)
+    if source:
+        where.append('e.article_id IN (SELECT article_id FROM entries WHERE source_id=?)')
+        args.append(source)
+    if unread:
+        where.append('e.read_at IS NULL')
+    if q.strip():
+        where.append('a.title LIKE ?')
+        args.append(f'%{q.strip()[:100]}%')
+    clause = 'WHERE ' + ' AND '.join(where)
+    with db.tx() as conn:
+        total = conn.execute(f'SELECT COUNT(*) FROM events e JOIN articles a ON a.id=e.article_id {clause}', args).fetchone()[0]
+        unread_total = conn.execute('SELECT COUNT(*) FROM events WHERE read_at IS NULL').fetchone()[0]
+        return {'items': event_rows(conn, clause, args, size, (max(page, 1) - 1) * size),
+                'total': total, 'unread': unread_total, 'page': page, 'size': size}
 
 
-assets=db.ROOT/'frontend'/'dist'/'assets'
-if assets.exists():app.mount('/assets',StaticFiles(directory=assets),name='assets')
+class ReadRequest(BaseModel):
+    ids: list[int] = []
+    articles: list[str] = []
+    all: bool = False
+    source: str = ''
+    read: bool = True
 
 
-@app.get('/')
+@app.post('/api/events/read')
+def mark_events(body: ReadRequest):
+    value = time.time() if body.read else None
+    with db.tx() as conn:
+        if body.all:
+            if body.source:
+                n = conn.execute('''UPDATE events SET read_at=? WHERE read_at IS NULL AND article_id IN
+                                    (SELECT article_id FROM entries WHERE source_id=?)''', (value, body.source)).rowcount
+            else:
+                n = conn.execute('UPDATE events SET read_at=? WHERE read_at IS NULL', (value,)).rowcount
+        else:
+            n = 0
+            for chunk in (body.ids[i:i + 500] for i in range(0, len(body.ids), 500)):
+                n += conn.execute(f"UPDATE events SET read_at=? WHERE id IN ({','.join('?' * len(chunk))})",
+                                  [value, *chunk]).rowcount
+            for chunk in (body.articles[i:i + 500] for i in range(0, len(body.articles), 500)):
+                n += conn.execute(f"UPDATE events SET read_at=? WHERE article_id IN ({','.join('?' * len(chunk))})",
+                                  [value, *chunk]).rowcount
+    return {'updated': n}
+
+
+# --- articles ------------------------------------------------------------------------------------
+
+SORTS = {
+    'published': "COALESCE(a.published,'') DESC, a.discovered DESC",
+    'discovered': 'a.discovered DESC',
+    'updated': 'COALESCE((SELECT MAX(created) FROM events WHERE article_id=a.id), a.discovered) DESC',
+    'official': 'official_position IS NULL, official_position',
+}
+
+
+@app.get('/api/articles')
+def articles(q: str = '', source: str = '', group: str = '', status: str = '', sort: str = 'published',
+             page: int = 1, size: int = 30, include_attachments: bool = False):
+    size = max(1, min(size, 100))
+    where, args = ['1'], []
+    if not include_attachments:
+        where.append("(a.kind='article' OR EXISTS(SELECT 1 FROM entries WHERE article_id=a.id))")
+    if q.strip():
+        terms = q.strip()[:100].split()
+        for term in terms:
+            where.append('(a.title LIKE ? OR a.subtitle LIKE ? OR a.origin LIKE ?)')
+            args += [f'%{term}%'] * 3
+    if source:
+        where.append('EXISTS(SELECT 1 FROM entries WHERE article_id=a.id AND source_id=?)')
+        args.append(source)
+    elif group in ('core', 'news'):
+        where.append('EXISTS(SELECT 1 FROM entries x JOIN sources s ON s.id=x.source_id WHERE x.article_id=a.id AND s.role=?)')
+        args.append(group)
+    if status == 'unread':
+        where.append('EXISTS(SELECT 1 FROM events WHERE article_id=a.id AND read_at IS NULL)')
+    elif status == 'changed':
+        where.append("EXISTS(SELECT 1 FROM events WHERE article_id=a.id AND kind!='new')")
+    elif status == 'error':
+        where.append("a.check_error!=''")
+    elif status == 'attachments':
+        where.append('EXISTS(SELECT 1 FROM links WHERE parent_id=a.id)')
+    if sort == 'official' and not source:
+        sort = 'published'
+    order = SORTS.get(sort, SORTS['published'])
+    position = '(SELECT MIN(position) FROM entries WHERE article_id=a.id AND source_id=?) AS official_position,' if sort == 'official' else ''
+    clause = ' AND '.join(where)
+    with db.tx() as conn:
+        total = conn.execute(f'SELECT COUNT(*) FROM articles a WHERE {clause}', args).fetchone()[0]
+        items = db.rows(conn, f'''
+            SELECT {position} a.id, a.url, a.kind, a.title, a.subtitle, a.origin, a.published, a.discovered,
+                   a.last_check, a.next_check, a.check_error, a.title_ok,
+                   (SELECT COUNT(*) FROM versions WHERE article_id=a.id) AS versions,
+                   (SELECT COUNT(*) FROM links WHERE parent_id=a.id) AS attachments,
+                   (SELECT COUNT(*) FROM events WHERE article_id=a.id AND read_at IS NULL) AS unread,
+                   (SELECT COUNT(*) FROM events WHERE article_id=a.id AND kind!='new') AS changes,
+                   (SELECT MAX(created) FROM events WHERE article_id=a.id) AS last_event
+            FROM articles a WHERE {clause} ORDER BY {order}, a.id LIMIT ? OFFSET ?''',
+            ([source] if position else []) + args + [size, (max(page, 1) - 1) * size])
+        columns = column_map(conn, [i['id'] for i in items])
+        for item in items:
+            item['columns'] = columns.get(item['id'], [])
+    return {'items': items, 'total': total, 'page': page, 'size': size}
+
+
+def version_list(conn, article_id: str) -> list[dict]:
+    return db.rows(conn, '''SELECT v.id, v.created, v.digest, v.baseline, v.note, v.file_digest, LENGTH(v.content) AS length,
+                                   f.bytes AS file_bytes
+                            FROM versions v LEFT JOIN files f ON f.digest=v.file_digest
+                            WHERE v.article_id=? ORDER BY v.id DESC''', (article_id,))
+
+
+@app.get('/api/articles/{article_id}')
+def article(article_id: str):
+    with db.tx() as conn:
+        item = db.row(conn, 'SELECT * FROM articles WHERE id=?', (article_id,))
+        if not item:
+            raise HTTPException(404, '没有找到这条信息')
+        item['columns'] = column_map(conn, [article_id])[article_id]
+        item['entries'] = db.rows(conn, '''SELECT e.source_id, s.name, e.page, e.position, e.first_seen, e.last_seen, e.raw_title
+                                          FROM entries e JOIN sources s ON s.id=e.source_id WHERE e.article_id=?''', (article_id,))
+        item['versions'] = version_list(conn, article_id)
+        latest = db.row(conn, 'SELECT content FROM versions WHERE article_id=? ORDER BY id DESC LIMIT 1', (article_id,))
+        item['content'] = latest['content'] if latest else ''
+        item['attachments'] = db.rows(conn, '''
+            SELECT a.id, a.url, a.title, a.last_check, a.check_error,
+                   (SELECT file_digest FROM versions WHERE article_id=a.id ORDER BY id DESC LIMIT 1) AS file_digest,
+                   (SELECT COUNT(*) FROM versions WHERE article_id=a.id) AS versions,
+                   (SELECT f.bytes FROM versions v JOIN files f ON f.digest=v.file_digest WHERE v.article_id=a.id ORDER BY v.id DESC LIMIT 1) AS bytes
+            FROM links l JOIN articles a ON a.id=l.attachment_id WHERE l.parent_id=? ORDER BY l.first_seen''', (article_id,))
+        item['parents'] = db.rows(conn, '''SELECT a.id, a.title FROM links l JOIN articles a ON a.id=l.parent_id
+                                          WHERE l.attachment_id=?''', (article_id,))
+        item['events'] = event_rows(conn, 'WHERE e.article_id=?', [article_id], 50, 0)
+        item['source_url'] = item['url']
+    return item
+
+
+@app.get('/api/articles/{article_id}/versions/{version_id}')
+def version(article_id: str, version_id: int):
+    with db.tx() as conn:
+        found = db.row(conn, 'SELECT * FROM versions WHERE id=? AND article_id=?', (version_id, article_id))
+    if not found:
+        raise HTTPException(404, '没有找到该版本')
+    return found
+
+
+@app.get('/api/articles/{article_id}/compare')
+def compare(article_id: str, base: int | None = None, target: int | None = None):
+    with db.tx() as conn:
+        versions = db.rows(conn, 'SELECT id, created, content FROM versions WHERE article_id=? ORDER BY id DESC', (article_id,))
+    if len(versions) < 2:
+        return {'rows': [], 'base': None, 'target': versions[0]['id'] if versions else None, 'stats': {'added': 0, 'removed': 0}}
+    by_id = {v['id']: v for v in versions}
+    new = by_id.get(target) if target else versions[0]
+    if not new:
+        raise HTTPException(404, '没有找到该版本')
+    older = [v for v in versions if v['id'] < new['id']]
+    old = by_id.get(base) if base else (older[0] if older else None)
+    if not old:
+        raise HTTPException(400, '没有可比较的更早版本')
+    return {'base': old['id'], 'target': new['id'], 'rows': diffing.compare(old['content'], new['content']),
+            'stats': diffing.stats(old['content'], new['content'])}
+
+
+@app.post('/api/articles/{article_id}/check')
+def check_article(article_id: str):
+    if not monitor.request_article(article_id):
+        raise HTTPException(404, '没有找到这条信息')
+    worker.wake_content.set()
+    return {'ok': True}
+
+
+@app.get('/api/files/{digest}')
+def download(digest: str, name: str = ''):
+    if not re.fullmatch(r'[0-9a-f]{64}', digest):
+        raise HTTPException(404, '文件不存在')
+    with db.tx() as conn:
+        known = db.row(conn, 'SELECT * FROM files WHERE digest=?', (digest,))
+        title = db.row(conn, '''SELECT a.title, a.url FROM versions v JOIN articles a ON a.id=v.article_id
+                                WHERE v.file_digest=? ORDER BY v.id DESC LIMIT 1''', (digest,))
+    path = files.path_for(digest)
+    if not known or not path.is_file():
+        raise HTTPException(404, '文件尚未保存到本机')
+    suffix = ''
+    if title:
+        match = re.search(r'\.[A-Za-z0-9]{2,5}$', urlsplit(title['url']).path)
+        suffix = match.group(0) if match else ''
+    filename = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', name or (title['title'] if title else digest))[:150]
+    if suffix and not filename.lower().endswith(suffix.lower()):
+        filename += suffix
+    return FileResponse(path, filename=filename, media_type='application/octet-stream')
+
+
+# --- e-mail ---------------------------------------------------------------------------------------
+
+EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+
+
+class EmailSettings(BaseModel):
+    enabled: bool | None = None
+    host: str | None = Field(None, max_length=200)
+    port: int | None = Field(None, ge=1, le=65535)
+    security: Literal['ssl', 'starttls', 'none'] | None = None
+    username: str | None = Field(None, max_length=200)
+    password: str | None = Field(None, max_length=500)
+    clear_password: bool = False
+    sender: str | None = Field(None, max_length=200)
+    sender_name: str | None = Field(None, max_length=60)
+    recipients: list[str] | None = None
+    merge_minutes: int | None = Field(None, ge=0, le=120)
+    digest_time: str | None = None
+    digest_include_instant: bool | None = None
+    digest_send_empty: bool | None = None
+    alert_failures: int | None = Field(None, ge=1, le=50)
+
+    @field_validator('recipients')
+    @classmethod
+    def _recipients(cls, value):
+        if value is None:
+            return value
+        cleaned = list(dict.fromkeys(v.strip() for v in value if v.strip()))
+        bad = [v for v in cleaned if not EMAIL_RE.match(v)]
+        if bad:
+            raise ValueError('收件地址格式不正确：' + '、'.join(bad))
+        if len(cleaned) > 20:
+            raise ValueError('收件人最多 20 个')
+        return cleaned
+
+    @field_validator('digest_time')
+    @classmethod
+    def _time(cls, value):
+        if value is not None and not re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d', value):
+            raise ValueError('汇总时间格式应为 HH:MM')
+        return value
+
+    @field_validator('sender')
+    @classmethod
+    def _sender(cls, value):
+        if value and not EMAIL_RE.match(value.strip()):
+            raise ValueError('发件地址格式不正确')
+        return value.strip() if value else value
+
+
+@app.get('/api/email')
+def email_settings():
+    with db.tx() as conn:
+        return notify.public(notify.load(conn))
+
+
+@app.put('/api/email')
+def save_email(body: EmailSettings):
+    changes = body.model_dump(exclude_none=True)
+    with db.tx() as conn:
+        current = notify.load(conn)
+        merged = {**current, **changes}
+        if merged.get('enabled') and (not merged.get('host') or not merged.get('recipients')):
+            raise HTTPException(400, '开启邮件通知前，请填写邮件服务器和至少一个收件人')
+        saved = notify.save(conn, changes)
+    worker.wake_mail.set()
+    return notify.public(saved)
+
+
+class TestRequest(BaseModel):
+    password: str | None = None
+
+
+@app.post('/api/email/test')
+def test_email(body: TestRequest = TestRequest()):
+    override = {}
+    if body.password:
+        from . import secret
+        override['password'] = secret.seal(body.password)
+    return notify.send_test(override)
+
+
+@app.post('/api/email/digest')
+def digest_now():
+    email_id = notify.queue_digest(force=True)
+    if not email_id:
+        raise HTTPException(400, '邮件通知尚未开启或配置不完整')
+    worker.wake_mail.set()
+    return {'queued': email_id}
+
+
+@app.get('/api/emails')
+def emails(page: int = 1, size: int = 30, state: str = ''):
+    size = max(1, min(size, 100))
+    where, args = ('WHERE state=?', [state]) if state in ('pending', 'sent', 'failed') else ('', [])
+    with db.tx() as conn:
+        total = conn.execute(f'SELECT COUNT(*) FROM emails {where}', args).fetchone()[0]
+        items = db.rows(conn, f'''SELECT id, kind, subject, recipients, created, state, attempts, next_attempt, last_error, sent_at,
+                                         (SELECT COUNT(*) FROM events WHERE email_id=emails.id) AS events
+                                  FROM emails {where} ORDER BY id DESC LIMIT ? OFFSET ?''', args + [size, (max(page, 1) - 1) * size])
+    for item in items:
+        item['recipients'] = json.loads(item['recipients'])
+    return {'items': items, 'total': total, 'page': page, 'size': size}
+
+
+@app.get('/api/emails/{email_id}/preview', response_class=HTMLResponse)
+def email_preview(email_id: int):
+    with db.tx() as conn:
+        found = db.row(conn, 'SELECT html_body, text_body FROM emails WHERE id=?', (email_id,))
+    if not found:
+        raise HTTPException(404, '邮件不存在')
+    return HTMLResponse(found['html_body'] or f"<pre>{found['text_body']}</pre>",
+                        headers={'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; img-src data:"})
+
+
+@app.post('/api/emails/{email_id}/retry')
+def retry_email(email_id: int):
+    with db.tx() as conn:
+        n = conn.execute("UPDATE emails SET state='pending', next_attempt=0 WHERE id=? AND state!='sent'", (email_id,)).rowcount
+    if not n:
+        raise HTTPException(400, '这封邮件已发送或不存在')
+    worker.wake_mail.set()
+    return {'ok': True}
+
+
+# --- this computer -------------------------------------------------------------------------------
+
+def startup_link() -> Path | None:
+    appdata = os.getenv('APPDATA')
+    if sys.platform != 'win32' or not appdata:
+        return None
+    return Path(appdata) / 'Microsoft' / 'Windows' / 'Start Menu' / 'Programs' / 'Startup' / 'Guanlan Monitor.lnk'
+
+
+def system_state() -> dict:
+    with db.tx() as conn:
+        keep = bool(db.get_setting(conn, 'keep_awake', True))
+    link = startup_link()
+    return {'keep_awake': keep, 'keep_awake_supported': power.SUPPORTED,
+            'autostart': bool(link and link.exists()), 'autostart_supported': link is not None,
+            'data_dir': str(config.DATA), 'url': config.LOCAL_URL}
+
+
+class SystemSettings(BaseModel):
+    keep_awake: bool | None = None
+    autostart: bool | None = None
+
+
+@app.get('/api/system')
+def system():
+    return system_state()
+
+
+@app.put('/api/system')
+def update_system(body: SystemSettings):
+    if body.keep_awake is not None:
+        with db.tx() as conn:
+            db.set_setting(conn, 'keep_awake', body.keep_awake)
+    if body.autostart is not None:
+        if startup_link() is None:
+            raise HTTPException(400, '开机自启只在 Windows 上可用')
+        script = config.ROOT / 'scripts' / 'autostart.ps1'
+        args = ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(script)]
+        result = subprocess.run(args + ([] if body.autostart else ['-Disable']), capture_output=True, text=True,
+                                timeout=30, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        if result.returncode != 0:
+            raise HTTPException(500, '设置开机自启失败：' + (result.stderr or result.stdout).strip()[:200])
+    return system_state()
+
+
+# --- health & front end ----------------------------------------------------------------------------
+
+@app.get('/api/health')
+def health():
+    return {'ok': worker.healthy(), 'workers': worker.status, 'started': STARTED, 'now': time.time()}
+
+
+if (config.FRONTEND_DIST / 'assets').exists():
+    app.mount('/assets', StaticFiles(directory=config.FRONTEND_DIST / 'assets'), name='assets')
+
+
+@app.get('/', include_in_schema=False)
 def home():
-    path=db.ROOT/'frontend'/'dist'/'index.html'
-    if not path.exists():raise HTTPException(503,'前端尚未构建，请运行启动脚本')
-    return FileResponse(path)
+    index = config.FRONTEND_DIST / 'index.html'
+    if not index.exists():
+        return HTMLResponse('<h3>前端尚未构建</h3><p>请运行 <code>.\\start.ps1 -Install</code>。</p>', status_code=503)
+    return FileResponse(index, headers={'Cache-Control': 'no-cache'})

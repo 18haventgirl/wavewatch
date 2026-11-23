@@ -1,61 +1,65 @@
+"""Start the monitor: one process serving the UI/API and running the background workers.
+
+    python run.py            # foreground, logs to console and logs/guanlan.log
+    python run.py --quiet    # no console output (used by the background launcher)
+"""
 from __future__ import annotations
-import atexit
+
+import argparse
 import json
+import logging
+import logging.handlers
 import os
-from pathlib import Path
-import signal
 import socket
-import subprocess
 import sys
-import time
+from pathlib import Path
 
-ROOT=Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
+
+from app import config  # noqa: E402
 
 
-def free_port(port):
+def setup_logging(quiet: bool) -> None:
+    config.LOGS.mkdir(parents=True, exist_ok=True)
+    handlers: list[logging.Handler] = [logging.handlers.RotatingFileHandler(
+        config.LOGS / 'guanlan.log', maxBytes=2 * 1024 * 1024, backupCount=5, encoding='utf-8')]
+    if not quiet:
+        handlers.append(logging.StreamHandler(sys.stdout))
+    logging.basicConfig(level=logging.INFO, handlers=handlers,
+                        format='%(asctime)s %(levelname)s %(name)s: %(message)s')
+    logging.getLogger('httpx').setLevel(logging.WARNING)
+
+
+def ensure_port_free() -> None:
     with socket.socket() as sock:
         try:
-            sock.bind(('127.0.0.1',port))
+            sock.bind((config.HOST, config.PORT))
         except OSError:
-            raise SystemExit(f'端口 {port} 已在使用中。请先停止现有实例。')
+            raise SystemExit(f'端口 {config.PORT} 已被占用：观澜可能已经在运行。打开 {config.LOCAL_URL} 查看，或先运行 stop.ps1。')
 
 
-def main():
-    for port in (8840,8841):
-        free_port(port)
-    from app import db,engine
-    db.init()
-    engine.prepare_local_scope()
-    data=ROOT/'data'
-    logs=ROOT/'logs'
-    logs.mkdir(exist_ok=True)
-    (data/'engine').mkdir(parents=True,exist_ok=True)
-    env=os.environ.copy()
-    env.update(PYTHONIOENCODING='utf-8',LOGGER_LEVEL='WARNING',FETCH_WORKERS='3',LITELLM_LOCAL_MODEL_COST_MAP='True')
-    args=[sys.executable,str(ROOT/'engine_runner.py'),'-h','127.0.0.1','-p','8841','-d',str(data/'engine'),'-C']
-    if not any((data/'engine'/name).exists() for name in ('changedetection.json','url-watches.json')):
-        args+=['-u','https://exportcontrol.mofcom.gov.cn/articleList.shtml?columnID=13&num=1','-u0',json.dumps({'title':'中国出口管制信息网 · 法律入口','paused':True})]
-    engine_log=open(logs/'engine.log','a',encoding='utf-8')
-    child=subprocess.Popen(args,cwd=ROOT,env=env,stdout=engine_log,stderr=subprocess.STDOUT)
-    runtime=data/'runtime.json'
-    runtime.write_text(json.dumps({'app_pid':os.getpid(),'engine_pid':child.pid,'python':sys.executable}),encoding='utf-8')
-    def cleanup():
-        if child.poll() is None:
-            child.terminate()
-            try:
-                child.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                child.kill()
-        engine_log.close()
-        runtime.unlink(missing_ok=True)
-    atexit.register(cleanup)
-    print('Local: http://127.0.0.1:8840',flush=True)
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--quiet', action='store_true')
+    args = parser.parse_args()
+    if args.quiet and sys.stdout is None:  # pythonw has no console
+        sys.stdout = sys.stderr = open(os.devnull, 'w', encoding='utf-8')
+    ensure_port_free()
+    setup_logging(args.quiet)
+    runtime = config.DATA / 'runtime.json'
+    config.DATA.mkdir(parents=True, exist_ok=True)
+    runtime.write_text(json.dumps({'pid': os.getpid(), 'python': sys.executable, 'url': config.LOCAL_URL}), encoding='utf-8')
+    logging.getLogger('guanlan').info('starting on %s', config.LOCAL_URL)
+    if not args.quiet:
+        print(f'观澜已启动：{config.LOCAL_URL}  （按 Ctrl+C 停止）', flush=True)
     import uvicorn
     try:
-        uvicorn.run('app.main:app',host='127.0.0.1',port=8840,log_level='warning',ws='none')
+        uvicorn.run('app.main:app', host=config.HOST, port=config.PORT, log_level='warning', ws='none',
+                    access_log=False, log_config=None)
     finally:
-        cleanup()
+        runtime.unlink(missing_ok=True)
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
     main()

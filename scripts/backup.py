@@ -1,23 +1,47 @@
-"""Create a stopped-service backup; do not copy a live SQLite/WAL bundle."""
-import datetime
-import json
-from pathlib import Path
-import sys
-import zipfile
-import psutil
+"""Consistent backup that works while the monitor is running.
 
-root=Path(__file__).resolve().parents[1]
-runtime=root/'data'/'runtime.json'
-if runtime.exists():
-    state=json.loads(runtime.read_text(encoding='utf-8'))
-    if any(psutil.pid_exists(state.get(key,-1)) for key in ('app_pid','engine_pid')):
-        raise SystemExit('请先运行 stop.ps1 停止监测，再执行备份。')
-folder=root/'backups'
-folder.mkdir(exist_ok=True)
-target=folder/('observatory-'+datetime.datetime.now().strftime('%Y%m%d-%H%M%S')+'.zip')
-with zipfile.ZipFile(target,'w',zipfile.ZIP_DEFLATED) as archive:
-    for file in (root/'data').rglob('*'):
-        if file.is_file() and file.name!='runtime.json':
-            archive.write(file,file.relative_to(root))
-    archive.write(root/'config'/'sources.json','config/sources.json')
-print(target)
+Uses SQLite's online backup API (safe with WAL) and copies saved attachment files.
+Output: backups/guanlan-YYYYmmdd-HHMMSS.zip
+"""
+from __future__ import annotations
+
+import datetime
+import sqlite3
+import sys
+import tempfile
+import zipfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from app import config  # noqa: E402
+
+
+def main() -> None:
+    if not config.DB_PATH.exists():
+        raise SystemExit('还没有数据库，无需备份。')
+    target_dir = ROOT / 'backups'
+    target_dir.mkdir(exist_ok=True)
+    target = target_dir / ('guanlan-' + datetime.datetime.now().strftime('%Y%m%d-%H%M%S') + '.zip')
+    with tempfile.TemporaryDirectory() as tmp:
+        snapshot = Path(tmp) / 'guanlan.sqlite3'
+        src = sqlite3.connect(config.DB_PATH)
+        dst = sqlite3.connect(snapshot)
+        with dst:
+            src.backup(dst)
+        dst.close()
+        src.close()
+        with zipfile.ZipFile(target, 'w', zipfile.ZIP_DEFLATED) as archive:
+            archive.write(snapshot, 'data/guanlan.sqlite3')
+            if config.FILES.exists():
+                for file in config.FILES.rglob('*'):
+                    if file.is_file() and not file.name.startswith('.part-'):
+                        archive.write(file, Path('data') / file.relative_to(config.DATA))
+            archive.write(ROOT / 'config' / 'sources.json', 'config/sources.json')
+    print(target)
+    print('提示：备份包含邮箱设置。Windows 上的邮箱授权码已加密，只能在本机本账户下使用。')
+
+
+if __name__ == '__main__':
+    main()
