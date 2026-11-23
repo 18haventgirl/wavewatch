@@ -13,8 +13,8 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA = Path(os.getenv('GUANLAN_DATA', ROOT / 'data'))
-LOGS = Path(os.getenv('GUANLAN_LOGS', ROOT / 'logs'))
+DATA = Path(os.getenv('WAVEWATCH_DATA') or os.getenv('GUANLAN_DATA') or ROOT / 'data')
+LOGS = Path(os.getenv('WAVEWATCH_LOGS') or os.getenv('GUANLAN_LOGS') or ROOT / 'logs')
 STATE = DATA / 'supervisor.json'
 
 

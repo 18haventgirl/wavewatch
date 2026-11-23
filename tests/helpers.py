@@ -71,7 +71,7 @@ class DataTestCase(unittest.TestCase):
     """Every test gets its own empty data directory and fake site."""
 
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix='guanlan-test-'))
+        self.tmp = Path(tempfile.mkdtemp(prefix='wavewatch-test-'))
         self._saved = {k: getattr(config, k) for k in ('DATA', 'DB_PATH', 'LEGACY_DB_PATH', 'FILES', 'LOGS', 'REQUEST_SPACING')}
         config.DATA = self.tmp
         config.DB_PATH = self.tmp / 'guanlan.sqlite3'

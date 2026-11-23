@@ -1,7 +1,7 @@
 """Consistent backup that works while the monitor is running.
 
 Uses SQLite's online backup API (safe with WAL) and copies saved attachment files.
-Output: backups/guanlan-YYYYmmdd-HHMMSS.zip
+Output: backups/wavewatch-YYYYmmdd-HHMMSS.zip
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ def main() -> None:
         raise SystemExit('还没有数据库，无需备份。')
     target_dir = ROOT / 'backups'
     target_dir.mkdir(exist_ok=True)
-    target = target_dir / ('guanlan-' + datetime.datetime.now().strftime('%Y%m%d-%H%M%S') + '.zip')
+    target = target_dir / ('wavewatch-' + datetime.datetime.now().strftime('%Y%m%d-%H%M%S') + '.zip')
     with tempfile.TemporaryDirectory() as tmp:
         snapshot = Path(tmp) / 'guanlan.sqlite3'
         src = sqlite3.connect(config.DB_PATH)

@@ -1,6 +1,6 @@
-# Tidegaze THVS · 出口管制信息监测（V1 本机版）
+# Wavewatch THVS · 出口管制信息监测（V1 本机版）
 
-Tidegaze（观潮）取自原名“观澜”。界面、邮件标题和发件人名称都使用这个名字；修改 `app/config.py` 里的 `APP_NAME` 和 `frontend/src/format.ts` 里的同名常量即可更换。
+界面、网页标题、邮件标题和发件人名称都使用 Wavewatch THVS 这个名字；修改 `app/config.py` 和 `frontend/src/format.ts` 里的 `APP_NAME` 即可更换。左上角使用 Trench Group 标志（`frontend/public/assets/trench-logo.png`），与 Revenue-THVS 页面一致。
 
 在自己的 Windows 电脑上实时监测**中国出口管制信息网**的五个栏目，发现新发布、正文修订和附件变化后，在网页里显示，并按设置发送邮件。
 
@@ -62,9 +62,9 @@ Tidegaze（观潮）取自原名“观澜”。界面、邮件标题和发件人
 
 ## 数据与备份
 
-- 数据库：`data/guanlan.sqlite3`（结构见 [DATABASE.md](DATABASE.md)）
+- 数据库：`data/guanlan.sqlite3`（结构见 [DATABASE.md](DATABASE.md)；沿用首版的文件名，避免移动已有数据）
 - 附件文件：`data/files/`
-- 日志：`logs/guanlan.log`（自动轮换），后台守护进程的日志在 `logs/supervisor.log`
+- 日志：`logs/wavewatch.log`（自动轮换），后台守护进程的日志在 `logs/supervisor.log`
 
 备份不需要停止服务：
 
@@ -72,7 +72,7 @@ Tidegaze（观潮）取自原名“观澜”。界面、邮件标题和发件人
 .\.venv\Scripts\python.exe scripts\backup.py
 ```
 
-备份文件保存在 `backups/guanlan-时间.zip`。恢复时先运行 `stop.ps1`，把当前 `data/` 改名保留，再把备份里的 `data/` 解压到项目目录，最后启动。
+备份文件保存在 `backups/wavewatch-时间.zip`。恢复时先运行 `stop.ps1`，把当前 `data/` 改名保留，再把备份里的 `data/` 解压到项目目录，最后启动。
 
 ## 安全边界
 

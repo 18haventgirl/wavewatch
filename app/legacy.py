@@ -17,7 +17,7 @@ from typing import Callable
 
 from . import config, db, files, monitor, site
 
-log = logging.getLogger('guanlan.legacy')
+log = logging.getLogger('wavewatch.legacy')
 
 
 def _brotli() -> Callable[[bytes], bytes] | None:

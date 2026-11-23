@@ -9,18 +9,19 @@ import os
 from datetime import timedelta, timezone
 from pathlib import Path
 
-APP_NAME = 'Tidegaze THVS'   # shown in the UI and in e-mails
+APP_NAME = 'Wavewatch THVS'   # shown in the UI and in e-mails
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA = Path(os.getenv('GUANLAN_DATA', ROOT / 'data'))
+DATA = Path(os.getenv('WAVEWATCH_DATA') or os.getenv('GUANLAN_DATA') or ROOT / 'data')
+# File name kept from the first release so existing data stays in place.
 DB_PATH = DATA / 'guanlan.sqlite3'
 LEGACY_DB_PATH = DATA / 'observatory.sqlite3'
 FILES = DATA / 'files'
-LOGS = Path(os.getenv('GUANLAN_LOGS', ROOT / 'logs'))
+LOGS = Path(os.getenv('WAVEWATCH_LOGS') or os.getenv('GUANLAN_LOGS') or ROOT / 'logs')
 FRONTEND_DIST = ROOT / 'frontend' / 'dist'
 
 HOST = '127.0.0.1'
-PORT = int(os.getenv('GUANLAN_PORT', '8840'))
+PORT = int(os.getenv('WAVEWATCH_PORT') or os.getenv('GUANLAN_PORT') or '8840')
 LOCAL_URL = f'http://{HOST}:{PORT}'
 
 BEIJING = timezone(timedelta(hours=8))
@@ -28,7 +29,7 @@ BEIJING = timezone(timedelta(hours=8))
 SITE_HOME = 'https://exportcontrol.mofcom.gov.cn/'
 LIST_API = 'https://exportcontrol.mofcom.gov.cn/edi_ecms_web_front/front/column/getColumnList'
 ALLOWED_HOSTS = {'exportcontrol.mofcom.gov.cn'}
-USER_AGENT = 'Guanlan/1.0 (personal export-control publication monitor)'
+USER_AGENT = 'Wavewatch-THVS/1.0 (personal export-control publication monitor)'
 
 # Defaults; every value below can be changed per column in the UI.
 DEFAULT_LIST_MINUTES = 5

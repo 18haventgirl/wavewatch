@@ -26,7 +26,7 @@ import truststore
 
 from . import config, db, diffing, secret
 
-log = logging.getLogger('guanlan.notify')
+log = logging.getLogger('wavewatch.notify')
 
 DEFAULTS = {
     'enabled': False,
@@ -286,7 +286,7 @@ def send(settings: dict, subject: str, text_body: str, html_body: str, recipient
     msg['Subject'] = subject
     msg['From'] = formataddr((settings['sender_name'] or config.APP_NAME, sender))
     msg['To'] = ', '.join(recipients)
-    msg['Message-ID'] = make_msgid(domain=sender.split('@')[-1] if '@' in sender else 'guanlan.local')
+    msg['Message-ID'] = make_msgid(domain=sender.split('@')[-1] if '@' in sender else 'wavewatch.local')
     msg.set_content(text_body)
     msg.add_alternative(html_body, subtype='html')
     context = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)

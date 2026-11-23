@@ -1,6 +1,6 @@
 import type {EventKind} from './api';
 
-export const APP_NAME = 'Tidegaze THVS';
+export const APP_NAME = 'Wavewatch THVS';
 
 const tz = 'Asia/Shanghai';
 

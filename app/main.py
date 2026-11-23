@@ -22,7 +22,7 @@ from pathlib import Path
 
 from . import config, db, diffing, files, legacy, monitor, notify, power, worker
 
-log = logging.getLogger('guanlan.api')
+log = logging.getLogger('wavewatch.api')
 STARTED = time.time()
 
 
@@ -563,7 +563,7 @@ def startup_link() -> Path | None:
     appdata = os.getenv('APPDATA')
     if sys.platform != 'win32' or not appdata:
         return None
-    return Path(appdata) / 'Microsoft' / 'Windows' / 'Start Menu' / 'Programs' / 'Startup' / 'Guanlan Monitor.lnk'
+    return Path(appdata) / 'Microsoft' / 'Windows' / 'Start Menu' / 'Programs' / 'Startup' / 'Wavewatch THVS.lnk'
 
 
 def system_state() -> dict:

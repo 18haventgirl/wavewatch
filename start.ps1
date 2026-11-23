@@ -1,4 +1,4 @@
-# Start Guanlan.
+# Start Wavewatch THVS.
 #   .\start.ps1               run in this window (Ctrl+C to stop)
 #   .\start.ps1 -Background   run hidden in the background, restarted automatically if it exits
 #   .\start.ps1 -Install      (re)install Python and front-end dependencies first
@@ -17,7 +17,7 @@ if (-not (Test-Path -LiteralPath $python)) {
 
 # Python packages: reinstall when the lock file changed.
 $lock = Join-Path $PSScriptRoot 'requirements.lock.txt'
-$marker = Join-Path $PSScriptRoot '.venv\guanlan-requirements.sha256'
+$marker = Join-Path $PSScriptRoot '.venv\wavewatch-requirements.sha256'
 $lockHash = (Get-FileHash -LiteralPath $lock -Algorithm SHA256).Hash
 $installed = if (Test-Path -LiteralPath $marker) { (Get-Content -LiteralPath $marker -Raw).Trim() } else { '' }
 if ($Install -or $installed -ne $lockHash) {
@@ -52,7 +52,7 @@ $url = 'http://127.0.0.1:8840'
 if ($Background) {
     $supervisor = Join-Path $PSScriptRoot 'scripts\supervise.py'
     Start-Process -FilePath $pythonw -ArgumentList @('-X', 'utf8', "`"$supervisor`"") -WorkingDirectory $PSScriptRoot -WindowStyle Hidden
-    Write-Host "Guanlan is starting in the background: $url"
+    Write-Host "Wavewatch THVS is starting in the background: $url"
     Start-Sleep -Seconds 4
     Start-Process $url
 } else {

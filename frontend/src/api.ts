@@ -90,7 +90,7 @@ export async function api<T>(path: string, init?: RequestInit & {json?: unknown}
   });
   if (!response.ok) {
     const data = await response.json().catch(() => null);
-    let message = '服务没有响应，请确认 Tidegaze THVS 正在运行';
+    let message = '服务没有响应，请确认 Wavewatch THVS 正在运行';
     if (data && typeof data.detail === 'string') message = data.detail;
     else if (data && Array.isArray(data.detail)) message = data.detail.map((d: {msg: string}) => d.msg.replace(/^Value error, /, '')).join('；');
     throw new ApiError(message);

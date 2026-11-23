@@ -14,7 +14,7 @@ import time
 
 from . import config, db, diffing, fetch, files, site
 
-log = logging.getLogger('guanlan.monitor')
+log = logging.getLogger('wavewatch.monitor')
 
 NOTIFY_RANK = {'instant': 2, 'digest': 1, 'off': 0}
 

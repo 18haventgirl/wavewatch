@@ -111,26 +111,3 @@ export const IconVersions = (p: IconProps) => <Glyph {...p}>
   <path d="m3 12 9 4.5 9-4.5"/>
   <path d="m3 16 9 4.5 9-4.5"/>
 </Glyph>;
-
-/** Brand mark: an eye made of two wave arcs, its pupil the rising sun. */
-export function BrandMark({size = 40}: {size?: number}) {
-  return <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true" className="brand-svg">
-    <defs>
-      <linearGradient id="bm-sea" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stopColor="#5aa8ff"/><stop offset=".55" stopColor="#1f6fe8"/><stop offset="1" stopColor="#123f9e"/>
-      </linearGradient>
-      <radialGradient id="bm-sun" cx=".5" cy=".4" r=".6">
-        <stop offset="0" stopColor="#fff7e0"/><stop offset=".6" stopColor="#ffd27a"/><stop offset="1" stopColor="#ff9f43"/>
-      </radialGradient>
-      <linearGradient id="bm-shine" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stopColor="#fff" stopOpacity=".55"/><stop offset=".5" stopColor="#fff" stopOpacity="0"/>
-      </linearGradient>
-    </defs>
-    <rect x="1" y="1" width="46" height="46" rx="13" fill="url(#bm-sea)"/>
-    <rect x="1" y="1" width="46" height="46" rx="13" fill="url(#bm-shine)"/>
-    <path d="M7 24c5-7.5 10.6-11 17-11s12 3.5 17 11" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round"/>
-    <circle cx="24" cy="24" r="6.2" fill="url(#bm-sun)"/>
-    <path d="M7 27.5c3 2.4 5.8 2.4 8.6 0s5.7-2.4 8.4 0 5.7 2.4 8.4 0 5.6-2.4 8.6 0" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round"/>
-    <path d="M10.5 34c2.3 1.8 4.5 1.8 6.8 0s4.5-1.8 6.7 0 4.5 1.8 6.7 0 4.5-1.8 6.8 0" fill="none" stroke="#fff" strokeOpacity=".6" strokeWidth="2.2" strokeLinecap="round"/>
-  </svg>;
-}

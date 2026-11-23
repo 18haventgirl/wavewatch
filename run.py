@@ -1,6 +1,6 @@
 """Start the monitor: one process serving the UI/API and running the background workers.
 
-    python run.py            # foreground, logs to console and logs/guanlan.log
+    python run.py            # foreground, logs to console and logs/wavewatch.log
     python run.py --quiet    # no console output (used by the background launcher)
 """
 from __future__ import annotations
@@ -23,7 +23,7 @@ from app import config  # noqa: E402
 def setup_logging(quiet: bool) -> None:
     config.LOGS.mkdir(parents=True, exist_ok=True)
     handlers: list[logging.Handler] = [logging.handlers.RotatingFileHandler(
-        config.LOGS / 'guanlan.log', maxBytes=2 * 1024 * 1024, backupCount=5, encoding='utf-8')]
+        config.LOGS / 'wavewatch.log', maxBytes=2 * 1024 * 1024, backupCount=5, encoding='utf-8')]
     if not quiet:
         handlers.append(logging.StreamHandler(sys.stdout))
     logging.basicConfig(level=logging.INFO, handlers=handlers,
@@ -36,7 +36,7 @@ def ensure_port_free() -> None:
         try:
             sock.bind((config.HOST, config.PORT))
         except OSError:
-            raise SystemExit(f'端口 {config.PORT} 已被占用：Tidegaze THVS 可能已经在运行。打开 {config.LOCAL_URL} 查看，或先运行 stop.ps1。')
+            raise SystemExit(f'端口 {config.PORT} 已被占用：Wavewatch THVS 可能已经在运行。打开 {config.LOCAL_URL} 查看，或先运行 stop.ps1。')
 
 
 def main() -> None:
@@ -50,7 +50,7 @@ def main() -> None:
     runtime = config.DATA / 'runtime.json'
     config.DATA.mkdir(parents=True, exist_ok=True)
     runtime.write_text(json.dumps({'pid': os.getpid(), 'python': sys.executable, 'url': config.LOCAL_URL}), encoding='utf-8')
-    logging.getLogger('guanlan').info('starting on %s', config.LOCAL_URL)
+    logging.getLogger('wavewatch').info('starting on %s', config.LOCAL_URL)
     if not args.quiet:
         print(f'{config.APP_NAME} 已启动：{config.LOCAL_URL}  （按 Ctrl+C 停止）', flush=True)
     import uvicorn

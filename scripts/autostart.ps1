@@ -1,11 +1,15 @@
-# Start Guanlan in the background whenever you sign in to Windows.
+# Start Wavewatch THVS in the background whenever you sign in to Windows.
 #   .\scripts\autostart.ps1            enable
 #   .\scripts\autostart.ps1 -Disable   disable
 # Creates or removes a shortcut in your Startup folder; no administrator rights needed.
 param([switch]$Disable)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$link = Join-Path ([Environment]::GetFolderPath('Startup')) 'Guanlan Monitor.lnk'
+$startup = [Environment]::GetFolderPath('Startup')
+$link = Join-Path $startup 'Wavewatch THVS.lnk'
+# Remove the shortcut name used by earlier versions.
+$legacy = Join-Path $startup 'Guanlan Monitor.lnk'
+if (Test-Path -LiteralPath $legacy) { Remove-Item -LiteralPath $legacy }
 if ($Disable) {
     if (Test-Path -LiteralPath $link) { Remove-Item -LiteralPath $link }
     Write-Host 'Autostart disabled.'
@@ -19,6 +23,6 @@ $shortcut.TargetPath = $pythonw
 $shortcut.Arguments = '-X utf8 "' + (Join-Path $root 'scripts\supervise.py') + '"'
 $shortcut.WorkingDirectory = $root
 $shortcut.WindowStyle = 7
-$shortcut.Description = 'Guanlan export-control monitor'
+$shortcut.Description = 'Wavewatch THVS export-control monitor'
 $shortcut.Save()
 Write-Host "Autostart enabled: $link"

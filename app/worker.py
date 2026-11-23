@@ -16,7 +16,7 @@ import traceback
 
 from . import db, monitor, notify, power
 
-log = logging.getLogger('guanlan.worker')
+log = logging.getLogger('wavewatch.worker')
 
 stop = threading.Event()
 wake_lists = threading.Event()
@@ -128,7 +128,7 @@ def power_loop() -> None:
 def start() -> None:
     stop.clear()
     for name, target in (('lists', lists_loop), ('content', content_loop), ('mail', mail_loop), ('power', power_loop)):
-        thread = threading.Thread(target=target, name=f'guanlan-{name}', daemon=True)
+        thread = threading.Thread(target=target, name=f'wavewatch-{name}', daemon=True)
         thread.start()
         _threads.append(thread)
     log.info('workers started')

@@ -46,7 +46,7 @@ export type Route = {page: string; article: string | null};
 
 function parse(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
-  if (parts[0] === 'article' && parts[1]) return {page: sessionStorage.getItem('guanlan.page') || 'overview', article: parts[1]};
+  if (parts[0] === 'article' && parts[1]) return {page: sessionStorage.getItem('wavewatch.page') || 'overview', article: parts[1]};
   return {page: parts[0] || 'overview', article: null};
 }
 
@@ -58,15 +58,15 @@ export function useRoute() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
   const go = useCallback((page: string) => {
-    try { sessionStorage.setItem('guanlan.page', page); } catch { /* private mode */ }
+    try { sessionStorage.setItem('wavewatch.page', page); } catch { /* private mode */ }
     location.hash = '#/' + page;
   }, []);
   const open = useCallback((id: string) => {
-    try { sessionStorage.setItem('guanlan.page', parse(location.hash).page); } catch { /* ignore */ }
+    try { sessionStorage.setItem('wavewatch.page', parse(location.hash).page); } catch { /* ignore */ }
     location.hash = '#/article/' + id;
   }, []);
   const close = useCallback(() => {
-    location.hash = '#/' + (sessionStorage.getItem('guanlan.page') || 'overview');
+    location.hash = '#/' + (sessionStorage.getItem('wavewatch.page') || 'overview');
   }, []);
   return {route, go, open, close};
 }

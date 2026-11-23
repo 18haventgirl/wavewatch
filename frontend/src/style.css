@@ -1,4 +1,4 @@
-/* Tidegaze THVS — liquid glass over a cool water-and-sky backdrop. */
+/* Wavewatch THVS — liquid glass over a cool water-and-sky backdrop. */
 
 :root {
   --bg: #e9eff7;
@@ -101,12 +101,18 @@ p { margin: 0; }
 /* --- shell ---------------------------------------------------------------------- */
 .shell { display: grid; grid-template-columns: 248px minmax(0, 1fr); gap: clamp(20px, 2vw, 36px); padding: 18px clamp(18px, 2.4vw, 44px) 18px 18px; min-height: 100vh; }
 .sidebar { position: sticky; top: 18px; height: calc(100vh - 36px); display: flex; flex-direction: column; padding: 18px 12px 14px; border-radius: 28px; }
-.brand { display: flex; align-items: center; gap: 12px; padding: 4px 8px 24px; }
-.brand-mark { display: grid; flex: none; border-radius: 13px; box-shadow: 0 10px 22px -10px rgba(18, 80, 200, .75); }
-.brand-name { display: grid; grid-template-columns: auto auto; align-items: baseline; column-gap: 6px; font-size: 21px; font-weight: 700; letter-spacing: -.01em; line-height: 1.15; }
-.brand-name b { font-size: 10.5px; font-weight: 750; letter-spacing: .18em; color: var(--blue); padding: 2px 5px 1px 6px; border-radius: 6px;
-  background: var(--blue-soft); transform: translateY(-3px); }
-.brand-name small { grid-column: 1 / -1; font-size: 11.5px; font-weight: 500; color: var(--ink-3); letter-spacing: .06em; margin-top: 3px; }
+.brand { display: grid; gap: 9px; padding: 8px 10px 24px; }
+.brand-row { display: flex; align-items: center; gap: 13px; }
+.brand-logo { width: 140px; height: auto; object-fit: contain; display: block; }
+.brand-tag { color: #3c565f; border-left: 1px solid #24485829; padding-left: 13px; font-size: 13px; font-weight: 600; white-space: nowrap; letter-spacing: .02em; }
+.brand-product { font-size: 12px; color: var(--ink-3); letter-spacing: .04em; display: flex; gap: 7px; align-items: baseline; }
+.brand-product b { font-size: 13px; font-weight: 650; color: var(--ink-2); letter-spacing: .01em; }
+:root[data-theme="dark"] .brand-logo { filter: invert(1) hue-rotate(180deg) brightness(1.05); }
+:root[data-theme="dark"] .brand-tag { color: #b9cbd2; border-left-color: rgba(255, 255, 255, .18); }
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="auto"] .brand-logo { filter: invert(1) hue-rotate(180deg) brightness(1.05); }
+  :root[data-theme="auto"] .brand-tag { color: #b9cbd2; border-left-color: rgba(255, 255, 255, .18); }
+}
 .glyph { flex: none; --glyph-accent: currentColor; }
 .nav .glyph { color: var(--ink-3); }
 .nav:hover .glyph { color: var(--ink-2); }

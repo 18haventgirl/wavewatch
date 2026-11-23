@@ -3,7 +3,7 @@ import {Moon, Sun, SunMoon} from 'lucide-react';
 import {api, type Overview as OverviewData, type Source} from './api';
 import Article from './Article';
 import {APP_NAME} from './format';
-import {BrandMark, IconColumns, IconLibrary, IconMail, IconOverview, IconRuns, IconUpdates} from './icons';
+import {IconColumns, IconLibrary, IconMail, IconOverview, IconRuns, IconUpdates} from './icons';
 import {useData, useHotkeys, useNow, useRoute, useStored} from './hooks';
 import Library from './pages/Library';
 import Notify from './pages/Notify';
@@ -26,7 +26,7 @@ type Theme = 'auto' | 'light' | 'dark';
 
 function Shell() {
   const {route, go, open, close} = useRoute();
-  const [theme, setTheme] = useStored<Theme>('guanlan.theme', 'auto');
+  const [theme, setTheme] = useStored<Theme>('wavewatch.theme', 'auto');
   const [refreshKey, setRefreshKey] = useState(0);
   const status = useData(s => api<OverviewData>('/overview', {signal: s}), [refreshKey], 8000);
   const [sources, setSources] = useState<Source[]>([]);
@@ -55,9 +55,12 @@ function Shell() {
   return <div className="shell">
     <div className="backdrop" aria-hidden="true"><i/><i/><i/></div>
     <aside className="sidebar glass">
-      <a className="brand" href="#/overview">
-        <span className="brand-mark"><BrandMark size={42}/></span>
-        <span className="brand-name">Tidegaze<b>THVS</b><small>出口管制信息监测</small></span>
+      <a className="brand" href="#/overview" aria-label={`${APP_NAME} 总览`}>
+        <span className="brand-row">
+          <img className="brand-logo" src="/assets/trench-logo.png" alt="Trench Group" width={153} height={21}/>
+          <span className="brand-tag" lang="en">THVS</span>
+        </span>
+        <span className="brand-product"><b lang="en">Wavewatch</b>出口管制信息监测</span>
       </a>
       <nav aria-label="主导航">
         {NAV.map((n, i) => <a key={n.id} href={'#/' + n.id} className={'nav' + (page === n.id ? ' on' : '')} aria-current={page === n.id ? 'page' : undefined}

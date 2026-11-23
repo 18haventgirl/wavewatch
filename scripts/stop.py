@@ -22,7 +22,7 @@ def stop(state_file: Path, script: str) -> bool:
     try:
         proc = psutil.Process(pid)
         if not any(Path(arg).name == script for arg in proc.cmdline()[1:]):
-            print(f'进程 {pid} 不是 Tidegaze THVS 的 {script}，未停止。')
+            print(f'进程 {pid} 不是 Wavewatch THVS 的 {script}，未停止。')
             return False
         proc.terminate()
         try:
@@ -38,6 +38,6 @@ if __name__ == '__main__':
     stopped_supervisor = stop(DATA / 'supervisor.json', 'supervise.py')
     stopped_service = stop(DATA / 'runtime.json', 'run.py')
     if stopped_supervisor or stopped_service:
-        print('Tidegaze THVS 已停止。')
+        print('Wavewatch THVS 已停止。')
     else:
-        print('没有发现正在运行的 Tidegaze THVS。')
+        print('没有发现正在运行的 Wavewatch THVS。')
