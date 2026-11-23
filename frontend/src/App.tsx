@@ -53,13 +53,14 @@ function Shell() {
   const beijing = new Date(now * 1000).toLocaleTimeString('zh-CN', {timeZone: 'Asia/Shanghai', hour12: false});
 
   return <div className="shell">
-    <div className="backdrop" aria-hidden="true"><i/><i/><i/></div>
+    <div className="backdrop" aria-hidden="true"><i/><i/><i/>
+      <svg className="horizon" viewBox="0 0 1440 220" preserveAspectRatio="none">
+        <path d="M0 120 C 240 80 480 160 720 120 S 1200 80 1440 120 V220 H0Z"/>
+        <path d="M0 150 C 260 118 520 182 780 150 S 1260 118 1440 150 V220 H0Z"/>
+      </svg></div>
     <aside className="sidebar glass">
       <a className="brand" href="#/overview" aria-label={`${APP_NAME} 总览`}>
-        <span className="brand-row">
-          <img className="brand-logo" src="/assets/trench-logo.png" alt="Trench Group" width={153} height={21}/>
-          <span className="brand-tag" lang="en">THVS</span>
-        </span>
+        <img className="brand-logo" src="/assets/trench-logo.png" alt="Trench Group" width={153} height={21}/>
         <span className="brand-product"><b lang="en">Wavewatch</b>出口管制信息监测</span>
       </a>
       <nav aria-label="主导航">

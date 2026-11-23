@@ -127,7 +127,7 @@ def list_sources(conn) -> list[dict]:
                                    (s['id'],)).fetchone()[0]
         s['last_run'] = db.row(conn, 'SELECT * FROM runs WHERE source_id=? ORDER BY id DESC LIMIT 1', (s['id'],))
         s['history'] = list(reversed(db.rows(conn, '''SELECT started, state, added, mode FROM runs WHERE source_id=?
-                                                     ORDER BY id DESC LIMIT 48''', (s['id'],))))
+                                                     ORDER BY id DESC LIMIT 96''', (s['id'],))))
         s['last_added'] = db.row(conn, "SELECT MAX(finished) AS at, SUM(added) AS total FROM runs WHERE source_id=? AND added>0",
                                  (s['id'],))
     return sources

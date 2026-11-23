@@ -23,8 +23,12 @@ function Ring({s, now}: {s: Source; now: number}) {
   </svg>;
 }
 
+const nextLabel = (at: number, now: number) => at <= now + 1 ? '即将检查' : `下次 ${countdown(at, now)}`;
+
+const HISTORY = 96;   // about 8 hours at the default 5-minute interval
+
 function Lane({s, now, onOpen}: {s: Source; now: number; onOpen: () => void}) {
-  const ticks = [...Array(Math.max(0, 48 - s.history.length)).fill(null), ...s.history];
+  const ticks = [...Array(Math.max(0, HISTORY - s.history.length)).fill(null), ...s.history.slice(-HISTORY)];
   const tone = sourceTone(s);
   const status = !s.enabled ? '已暂停' : s.state === 'checking' ? '正在检查…'
     : s.state === 'error' ? `检查失败 ${s.fail_count} 次` : s.last_success ? `${ago(s.last_success, now)}检查正常` : '等待首次检查';
@@ -37,11 +41,10 @@ function Lane({s, now, onOpen}: {s: Source; now: number; onOpen: () => void}) {
       {ticks.map((t, i) => <i key={i} className={!t ? 'tick tick-empty' : `tick tick-${t.state}${t.added ? ' tick-new' : ''}${t.mode === 'full' ? ' tick-full' : ''}`}
         title={t ? `${clock(t.started)} ${t.state === 'ok' ? (t.added ? `发现 ${t.added} 篇新文章` : '无新内容') : t.state === 'error' ? '失败' : t.state}` : undefined}/>)}
     </span>
-    <span className={'lane-status tone-' + tone}><Dot tone={tone}/>{status}</span>
     <span className="lane-next">
+      <span className="lane-text"><b className={'tone-' + tone}><Dot tone={tone}/>{status}</b>
+        <small>{s.enabled ? (s.state === 'checking' ? '检查中' : nextLabel(s.next_check, now)) + `，${interval(s.list_minutes)}` : '不检查'}</small></span>
       <Ring s={s} now={now}/>
-      <span><b>{s.enabled ? (s.state === 'checking' ? '检查中' : countdown(s.next_check, now)) : '—'}</b>
-        <small>{s.enabled ? interval(s.list_minutes) : '不检查'}</small></span>
     </span>
   </button>;
 }
@@ -75,31 +78,41 @@ export default function Overview({onOpen, go}: {onOpen: (id: string) => void; go
   if (data.import?.error) attention.push({key: 'imp', text: `旧版数据导入失败：${data.import.error}。已从官网重新建立数据。`});
   Object.entries(data.workers).forEach(([name, w]) => { if (w.error) attention.push({key: 'w' + name, text: `后台任务出错：${w.error}`, action: () => go('runs'), label: '查看记录'}); });
 
+  const soonest = active.filter(s => s.state !== 'checking').map(s => s.next_check).sort((a, b) => a - b)[0];
+  const tone = !data.healthy || failing.length ? 'warn' : active.length ? 'live' : 'idle';
   return <div className="page overview">
-    <header className="page-head">
-      <div>
-        <h1>{headline}{active.length && !failing.length && data.healthy ? <span className="live-mark" aria-hidden="true"/> : null}</h1>
-        <p>中国出口管制信息网，{active.length} 个栏目在监测{data.stats.never_checked ? `，${data.stats.never_checked} 篇正文待首次保存` : ''}</p>
+    <header className={'glass hero hero-' + tone}>
+      <div className="hero-main">
+        <span className="hero-kicker"><Dot tone={tone === 'warn' ? 'warn' : tone === 'live' ? 'live' : 'idle'}/>中国出口管制信息网，{active.length} 个栏目</span>
+        <h1>{headline}</h1>
+        <p>{checking ? '正在检查官网…' : soonest ? (soonest <= now + 1 ? '马上开始下一次检查' : `下一次检查 ${countdown(soonest, now)}`) : '没有正在监测的栏目'}
+          {data.stats.never_checked ? `，${data.stats.never_checked} 篇正文待首次保存` : ''}</p>
+        <div className="hero-actions">
+          <Button variant="primary" icon={<IconRefresh size={18} className={checking ? 'spin' : ''}/>} busy={busy === 'all'}
+            onClick={() => run('all', async () => { await post('/check'); window.setTimeout(reload, 800); }, '已开始检查全部栏目')}>立即检查</Button>
+          <button className="hero-mail" onClick={() => go('notify')}>
+            <IconMail size={20}/><span>{data.email.ready ? `邮件已开启，发给 ${data.email.recipients} 人` : '邮件未开启'}
+              <small>{data.email.ready ? (data.email.last_sent ? `上次发送 ${clock(data.email.last_sent)}` : `每日 ${data.email.digest_time} 汇总`) : '点此设置'}</small></span>
+          </button>
+        </div>
       </div>
-      <Button variant="primary" icon={<IconRefresh size={18} className={checking ? 'spin' : ''}/>} busy={busy === 'all'}
-        onClick={() => run('all', async () => { await post('/check'); window.setTimeout(reload, 800); }, '已开始检查全部栏目')}>立即检查</Button>
+      <div className="hero-figures">
+        <button onClick={() => go('updates')}><span className="fig-label">今日新发布</span><span className="fig-value">{data.stats.today_new}</span></button>
+        <button onClick={() => go('updates')}><span className="fig-label">今日修订与附件</span><span className="fig-value">{data.stats.today_changed}</span></button>
+        <button onClick={() => go('updates')}><span className="fig-label">未读</span><span className={'fig-value' + (data.stats.unread ? ' accent' : '')}>{data.stats.unread}</span></button>
+        <button onClick={() => go('library')}><span className="fig-label">已收录文章</span><span className="fig-value">{data.stats.articles}</span></button>
+      </div>
+      <svg className="hero-wave" viewBox="0 0 1200 80" preserveAspectRatio="none" aria-hidden="true">
+        <path className="w1" d="M0 46 C 150 26 300 66 450 46 S 750 26 900 46 S 1200 66 1350 46 V80 H0Z"/>
+        <path className="w2" d="M0 56 C 160 40 320 72 480 56 S 800 40 960 56 S 1280 72 1440 56 V80 H0Z"/>
+      </svg>
     </header>
 
     <section className="glass lanes" aria-label="栏目实时状态">
+      <div className="lanes-head"><h2>栏目实时状态</h2>
+        <div className="lanes-legend"><span><i className="tick tick-ok"/>正常</span><span><i className="tick tick-ok tick-new"/>发现新文章</span>
+          <span><i className="tick tick-error"/>失败</span><span><i className="tick tick-ok tick-full"/>完整核对</span><span className="muted">最近约 8 小时 → 现在</span></div></div>
       {data.sources.map(s => <Lane key={s.id} s={s} now={now} onOpen={() => go('sources')}/>)}
-      <div className="lanes-legend"><span><i className="tick tick-ok"/>正常</span><span><i className="tick tick-ok tick-new"/>有新文章</span>
-        <span><i className="tick tick-error"/>失败</span><span><i className="tick tick-ok tick-full"/>完整核对</span></div>
-    </section>
-
-    <section className="figures" aria-label="今日概况">
-      <button onClick={() => go('updates')}><b>{data.stats.today_new}</b><span>今日新发布</span></button>
-      <button onClick={() => go('updates')}><b>{data.stats.today_changed}</b><span>今日修订与附件</span></button>
-      <button onClick={() => go('updates')}><b className={data.stats.unread ? 'accent' : ''}>{data.stats.unread}</b><span>未读</span></button>
-      <button onClick={() => go('library')}><b>{data.stats.articles}</b><span>已收录文章</span></button>
-      <button className="figure-mail" onClick={() => go('notify')}>
-        <IconMail size={26}/><span>{data.email.ready ? `邮件已开启，发给 ${data.email.recipients} 人` : '邮件未开启'}
-          <small>{data.email.ready ? (data.email.last_sent ? `上次发送 ${clock(data.email.last_sent)}` : `每日 ${data.email.digest_time} 汇总`) : '点此设置'}</small></span>
-      </button>
     </section>
 
     <div className="overview-grid">
