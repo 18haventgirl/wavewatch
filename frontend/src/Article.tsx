@@ -1,5 +1,5 @@
 import {useEffect, useMemo, useRef, useState, type ReactNode} from 'react';
-import {Download, ExternalLink, X} from 'lucide-react';
+import {Check, Download, ExternalLink, X} from 'lucide-react';
 import {IconFile, IconRefresh, IconVersions} from './icons';
 import {api, post, type ArticleDetail, type Compare, type DiffRow, type Version} from './api';
 import {ago, bytes, clock, fullTime, kindLabel} from './format';
@@ -32,6 +32,26 @@ function DiffView({rows}: {rows: DiffRow[]}) {
         <span className="cell new">{r.new != null ? <Highlighted text={r.new} spans={r.spans?.new}/> : null}</span>
       </div>)}
   </div>;
+}
+
+/** Whether the shown version is still what the official page says, in plain words. */
+function VersionStatus({detail, version}: {detail: ArticleDetail; version?: Version}) {
+  if (!version) return null;
+  const latest = detail.versions[0]?.id === version.id;
+  if (!latest) {
+    return <span className="version-state muted">这是 {fullTime(version.created)} 保存的旧版本{version.note ? `（${version.note}）` : ''}</span>;
+  }
+  const imported = version.note.includes('导入');
+  const recheckedSince = detail.last_check != null && detail.last_check > version.created + 1;
+  if (detail.check_error) {
+    return <span className="version-state warn" title={detail.check_error}>最近一次复查失败：{detail.check_error}，将自动重试</span>;
+  }
+  if (recheckedSince) {
+    return <span className="version-state ok" title={`此版本保存于 ${fullTime(version.created)}${version.note ? `，${version.note}` : ''}`}>
+      <Check size={14}/>已于 {ago(detail.last_check)}复查，与官网一致</span>;
+  }
+  if (imported) return <span className="version-state muted">从旧版快照导入，等待首次复查</span>;
+  return <span className="version-state muted">保存于 {ago(version.created)}</span>;
 }
 
 function versionLabel(v: Version, index: number) {
@@ -116,7 +136,7 @@ export default function Article({id, onClose, onOpen, onChanged}: {id: string; o
             <div className="version-bar">
               <select value={versionId ?? data.versions[0].id} onChange={e => setVersionId(Number(e.target.value))} aria-label="选择版本">
                 {data.versions.map((v, i) => <option key={v.id} value={v.id}>{versionLabel(v, i)}</option>)}</select>
-              {(() => { const v = data.versions.find(x => x.id === (versionId ?? data.versions[0].id)); return v?.note ? <span className="muted small">{v.note}</span> : null; })()}
+              <VersionStatus detail={data} version={data.versions.find(x => x.id === (versionId ?? data.versions[0].id))}/>
               {(() => { const v = data.versions.find(x => x.id === (versionId ?? data.versions[0].id)); return v?.file_digest
                 ? <a className="btn btn-plain btn-small" href={`/api/files/${v.file_digest}`}><Download size={14}/>下载此版本文件{v.file_bytes ? `（${bytes(v.file_bytes)}）` : ''}</a> : null; })()}
             </div>

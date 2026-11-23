@@ -474,6 +474,10 @@ button.run-row:hover { background: var(--fill); }
 .reading { font-family: var(--serif); font-size: 17px; line-height: 1.95; padding: 22px 26px; border-radius: 18px; background: var(--glass); border: 1px solid var(--hair); }
 .reading p { margin: 0 0 .7em; text-indent: 2em; }
 .reading p.figure-note { text-indent: 0; font-family: var(--sans); font-size: 13px; color: var(--ink-3); padding: 6px 10px; border-radius: 8px; background: var(--fill); }
+.version-state { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; padding: 3px 10px; border-radius: 9px; }
+.version-state.ok { color: var(--green); background: color-mix(in srgb, var(--green) 11%, transparent); }
+.version-state.warn { color: var(--amber); background: var(--amber-soft); }
+.version-state.muted { color: var(--ink-3); padding-left: 0; }
 .diff-stats { display: inline-flex; gap: 10px; font-variant-numeric: tabular-nums; }
 .plus { color: var(--green); }
 .minus { color: var(--red); }
