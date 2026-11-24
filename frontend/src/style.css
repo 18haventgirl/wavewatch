@@ -144,13 +144,13 @@ nav { display: flex; flex-direction: column; gap: 2px; }
 .service { display: flex; align-items: center; justify-content: center; gap: 9px; height: 40px; padding: 0 14px; border-radius: 13px; background: var(--fill); cursor: default; }
 .service-clock { font-size: 13px; color: var(--ink-3); white-space: nowrap; }
 .service-clock b { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: .01em; margin-left: 2px; }
-.switches { display: flex; align-items: center; justify-content: center; gap: 8px; }
-.seg-mini { display: flex; gap: 2px; padding: 3px; border-radius: 11px; background: var(--fill); }
-.seg-mini button { min-width: 32px; height: 28px; padding: 0 8px; display: grid; place-items: center; border-radius: 8px; color: var(--ink-3);
-  font-size: 12.5px; font-weight: 600; transition: background .15s, color .15s; }
+.switches { display: flex; align-items: stretch; gap: 8px; }
+.seg-mini { display: flex; gap: 2px; padding: 3px; border-radius: 11px; background: var(--fill); flex: 3 1 0; min-width: 0; }
+.seg-mini.lang { flex: 2 1 0; }
+.seg-mini button { flex: 1 1 0; min-width: 0; height: 30px; padding: 0 4px; display: grid; place-items: center; border-radius: 8px; color: var(--ink-3);
+  font-size: 12.5px; font-weight: 600; letter-spacing: .02em; transition: background .15s, color .15s; }
 .seg-mini button:hover { color: var(--ink); }
 .seg-mini button.on { background: var(--glass-strong); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .08), inset 0 1px 0 var(--glass-shine); }
-.seg-mini.lang button { min-width: 38px; letter-spacing: .02em; }
 .lang-root { display: contents; }
 .main { min-width: 0; width: 100%; padding: 8px 0 48px; }
 
