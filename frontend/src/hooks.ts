@@ -1,3 +1,4 @@
+import {t} from './i18n';
 import {useCallback, useEffect, useRef, useState} from 'react';
 
 /** Load data, optionally refresh on an interval (paused while the tab is hidden). */
@@ -14,7 +15,7 @@ export function useData<T>(load: (signal: AbortSignal) => Promise<T>, deps: unkn
     setLoading(true);
     loadRef.current(controller.signal)
       .then(value => { setData(value); setError(''); })
-      .catch(e => { if (e.name !== 'AbortError') setError(e.message || '加载失败'); })
+      .catch(e => { if (e.name !== 'AbortError') setError(e.message || t('加载失败', 'Could not load')); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps

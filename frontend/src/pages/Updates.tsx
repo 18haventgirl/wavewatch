@@ -4,6 +4,7 @@ import {IconCalm} from '../icons';
 import {api, post, type Page, type Source, type UpdateEvent} from '../api';
 import {clock, dayLabel, publishedDate} from '../format';
 import {useData, useHotkeys} from '../hooks';
+import {columnName, t, tx} from '../i18n';
 import {Button, ColumnTag, Empty, ErrorNote, KindBadge, Loading, Pager, Segmented, Toggle, useAction, useDebounced} from '../ui';
 
 type Kind = '' | 'new' | 'changes';
@@ -50,45 +51,47 @@ export default function Updates({onOpen, sources, refreshKey}: {onOpen: (id: str
 
   return <div className="page">
     <header className="page-head">
-      <div><h1>动态</h1><p>官网的新发布、正文修订和附件变化，按发现时间排列。</p></div>
+      <div><h1>{t('动态', 'Updates')}</h1><p>{t('官网的新发布、正文修订和附件变化，按发现时间排列。', 'New publications, revisions and file changes on the site, newest first.')}</p></div>
       <Button icon={<CheckCheck size={16}/>} disabled={!data?.unread} busy={busy === 'all'}
-        onClick={() => run('all', async () => { await post('/events/read', {all: true, source}); reload(); }, '已全部标为已读')}>
-        {source ? '本栏目全部已读' : '全部标为已读'}</Button>
+        onClick={() => run('all', async () => { await post('/events/read', {all: true, source}); reload(); }, t('已全部标为已读', 'All marked as read'))}>
+        {source ? t('本栏目全部已读', 'Mark column as read') : t('全部标为已读', 'Mark all as read')}</Button>
     </header>
 
     <div className="toolbar glass">
-      <Segmented label="变化类型" value={kind} onChange={setKind}
-        options={[{value: '', label: '全部'}, {value: 'new', label: '新发布'}, {value: 'changes', label: '修订与附件'}]}/>
-      <select value={source} onChange={e => setSource(e.target.value)} aria-label="栏目">
-        <option value="">全部栏目</option>
-        {sources.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+      <Segmented label={t('变化类型', 'Change type')} value={kind} onChange={setKind}
+        options={[{value: '', label: t('全部', 'All')}, {value: 'new', label: t('新发布', 'New')}, {value: 'changes', label: t('修订与附件', 'Revisions & files')}]}/>
+      <select value={source} onChange={e => setSource(e.target.value)} aria-label={t('栏目', 'Column')}>
+        <option value="">{t('全部栏目', 'All columns')}</option>
+        {sources.map(s => <option key={s.id} value={s.id}>{columnName(s.id, s.name)}</option>)}
       </select>
-      <label className="inline-toggle"><Toggle checked={unread} onChange={setUnread} label="只看未读"/>只看未读{data ? <b>{data.unread}</b> : null}</label>
-      <label className="search"><Search size={16}/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索标题" aria-label="搜索标题"/>
-        {query ? <button onClick={() => setQuery('')} aria-label="清除"><X size={14}/></button> : null}</label>
+      <label className="inline-toggle"><Toggle checked={unread} onChange={setUnread} label={t('只看未读', 'Unread only')}/>{t('只看未读', 'Unread only')}{data ? <b>{data.unread}</b> : null}</label>
+      <label className="search"><Search size={16}/><input value={query} onChange={e => setQuery(e.target.value)} placeholder={t('搜索标题', 'Search titles')} aria-label={t('搜索标题', 'Search titles')}/>
+        {query ? <button onClick={() => setQuery('')} aria-label={t('清除', 'Clear')}><X size={14}/></button> : null}</label>
     </div>
 
     {error ? <ErrorNote message={error} onRetry={reload}/> : null}
     <section className="glass panel timeline" aria-busy={loading}>
-      {!data ? <Loading/> : !items.length ? <Empty icon={<IconCalm size={26}/>} title={unread ? '没有未读动态' : '没有符合条件的动态'}>
-        {unread ? '全部看完了。' : '换个筛选条件，或等待下次检查发现变化。'}</Empty> :
+      {!data ? <Loading/> : !items.length ? <Empty icon={<IconCalm size={26}/>} title={unread ? t('没有未读动态', 'Nothing unread') : t('没有符合条件的动态', 'No matching updates')}>
+        {unread ? t('全部看完了。', 'You are all caught up.') : t('换个筛选条件，或等待下次检查发现变化。', 'Try other filters, or wait for the next check to find changes.')}</Empty> :
         groups.map(g => <div key={g.day} className="day-group">
           <h3 className="day">{g.day}</h3>
-          {g.items.map(({e, index}) => <div key={e.id} className={'update-row' + (e.read_at ? '' : ' unread') + (index === cursor ? ' cursor' : '')}>
-            <button className="read-dot" title={e.read_at ? '标为未读' : '标为已读'} aria-label={e.read_at ? '标为未读' : '标为已读'}
-              onClick={() => markRead(e, !!e.read_at)}><Circle size={10}/></button>
-            <button className="update-main" onClick={() => { setCursor(index); markRead(e); onOpen(e.article_id); }}>
-              <span className="update-meta"><KindBadge kind={e.kind}/>{e.columns.map(c => <ColumnTag key={c.id} column={c}/>)}
-                {e.published ? <span className="muted">原站发布 {publishedDate(e.published)}</span> : null}</span>
-              <span className="update-title">{e.title}</span>
-              {e.attachment_title ? <span className="update-note">附件：{e.attachment_title}{e.summary && e.kind === 'attachment_changed' ? `（${e.summary}）` : ''}</span>
-                : e.summary ? <span className="update-note">{e.summary}</span> : null}
-            </button>
-            <time>{clock(e.created, false)}</time>
-          </div>)}
+          {g.items.map(({e, index}) => {
+            const toggle = e.read_at ? t('标为未读', 'Mark as unread') : t('标为已读', 'Mark as read');
+            return <div key={e.id} className={'update-row' + (e.read_at ? '' : ' unread') + (index === cursor ? ' cursor' : '')}>
+              <button className="read-dot" title={toggle} aria-label={toggle} onClick={() => markRead(e, !!e.read_at)}><Circle size={10}/></button>
+              <button className="update-main" onClick={() => { setCursor(index); markRead(e); onOpen(e.article_id); }}>
+                <span className="update-meta"><KindBadge kind={e.kind}/>{e.columns.map(c => <ColumnTag key={c.id} column={c}/>)}
+                  {e.published ? <span className="muted">{t('原站发布 ', 'Published ')}{publishedDate(e.published)}</span> : null}</span>
+                <span className="update-title">{e.title}</span>
+                {e.attachment_title ? <span className="update-note">{t('附件：', 'File: ')}{e.attachment_title}{e.summary && e.kind === 'attachment_changed' ? t(`（${tx(e.summary)}）`, ` (${tx(e.summary)})`) : ''}</span>
+                  : e.summary ? <span className="update-note">{tx(e.summary)}</span> : null}
+              </button>
+              <time>{clock(e.created, false)}</time>
+            </div>;
+          })}
         </div>)}
       {data ? <Pager page={page} total={data.total} size={data.size} onPage={setPage}/> : null}
     </section>
-    <p className="hint">快捷键：J / K 上下移动，Enter 打开，E 切换已读，/ 搜索</p>
+    <p className="hint">{t('快捷键：J / K 上下移动，Enter 打开，E 切换已读，/ 搜索', 'Shortcuts: J / K to move, Enter to open, E to toggle read, / to search')}</p>
   </div>;
 }

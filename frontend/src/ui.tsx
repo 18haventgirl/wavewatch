@@ -2,6 +2,7 @@ import React, {createContext, useCallback, useContext, useEffect, useRef, useSta
 import {ChevronLeft, ChevronRight, LoaderCircle} from 'lucide-react';
 import type {Column, EventKind} from './api';
 import {kindLabel} from './format';
+import {columnName, groupName, t} from './i18n';
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'plain' | 'quiet' | 'danger'; icon?: React.ReactNode; busy?: boolean; small?: boolean;
@@ -40,32 +41,32 @@ export function Empty({icon, title, children, action}: {icon?: React.ReactNode; 
     {children ? <p>{children}</p> : null}{action}</div>;
 }
 
-export function Loading({label = '正在读取…'}: {label?: string}) {
-  return <div className="loading"><LoaderCircle size={18} className="spin"/>{label}</div>;
+export function Loading({label}: {label?: string}) {
+  return <div className="loading"><LoaderCircle size={18} className="spin"/>{label ?? t('正在读取…', 'Loading…')}</div>;
 }
 
 export function ErrorNote({message, onRetry}: {message: string; onRetry?: () => void}) {
-  return <div className="error-note" role="alert"><span>{message}</span>{onRetry ? <button onClick={onRetry}>重试</button> : null}</div>;
+  return <div className="error-note" role="alert"><span>{message}</span>{onRetry ? <button onClick={onRetry}>{t('重试', 'Retry')}</button> : null}</div>;
 }
 
 export function KindBadge({kind}: {kind: EventKind}) {
-  return <span className={'kind kind-' + kind}>{kindLabel[kind]}</span>;
+  return <span className={'kind kind-' + kind}>{kindLabel(kind)}</span>;
 }
 
 export function ColumnTag({column}: {column: Column}) {
-  return <span className={'col-tag' + (column.role === 'core' ? ' core' : '')} title={column.group}>
-    {column.role === 'core' ? <i className="seal" aria-hidden="true">政</i> : null}{column.name}
+  return <span className={'col-tag' + (column.role === 'core' ? ' core' : '')} title={groupName(column.group)}>
+    {column.role === 'core' ? <i className="seal" aria-hidden="true">政</i> : null}{columnName(column.id, column.name)}
   </span>;
 }
 
 export function Pager({page, total, size, onPage}: {page: number; total: number; size: number; onPage: (p: number) => void}) {
   const pages = Math.max(1, Math.ceil(total / size));
-  if (total <= size) return <div className="pager"><span>共 {total} 条</span></div>;
+  if (total <= size) return <div className="pager"><span>{t(`共 ${total} 条`, `${total} total`)}</span></div>;
   return <div className="pager">
-    <span>共 {total} 条，第 {page} / {pages} 页</span>
+    <span>{t(`共 ${total} 条，第 ${page} / ${pages} 页`, `${total} total, page ${page} of ${pages}`)}</span>
     <div>
-      <button className="icon-btn" aria-label="上一页" disabled={page <= 1} onClick={() => onPage(page - 1)}><ChevronLeft size={17}/></button>
-      <button className="icon-btn" aria-label="下一页" disabled={page >= pages} onClick={() => onPage(page + 1)}><ChevronRight size={17}/></button>
+      <button className="icon-btn" aria-label={t('上一页', 'Previous page')} disabled={page <= 1} onClick={() => onPage(page - 1)}><ChevronLeft size={17}/></button>
+      <button className="icon-btn" aria-label={t('下一页', 'Next page')} disabled={page >= pages} onClick={() => onPage(page + 1)}><ChevronRight size={17}/></button>
     </div>
   </div>;
 }
@@ -107,7 +108,7 @@ export function useAction() {
       if (done) toast(done);
       return true;
     } catch (e) {
-      toast(e instanceof Error ? e.message : '操作没有完成', 'error');
+      toast(e instanceof Error ? e.message : t('操作没有完成', 'The action did not finish'), 'error');
       return false;
     } finally {
       setBusy('');

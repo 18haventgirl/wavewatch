@@ -1,3 +1,5 @@
+import {t, tx} from './i18n';
+
 export type Role = 'core' | 'news';
 export type Notify = 'instant' | 'digest' | 'off';
 export type EventKind = 'new' | 'changed' | 'attachment_new' | 'attachment_changed';
@@ -90,9 +92,9 @@ export async function api<T>(path: string, init?: RequestInit & {json?: unknown}
   });
   if (!response.ok) {
     const data = await response.json().catch(() => null);
-    let message = '服务没有响应，请确认 Wavewatch THVS 正在运行';
-    if (data && typeof data.detail === 'string') message = data.detail;
-    else if (data && Array.isArray(data.detail)) message = data.detail.map((d: {msg: string}) => d.msg.replace(/^Value error, /, '')).join('；');
+    let message = t('服务没有响应，请确认 Wavewatch THVS 正在运行', 'No response from the service; make sure Wavewatch THVS is running');
+    if (data && typeof data.detail === 'string') message = tx(data.detail);
+    else if (data && Array.isArray(data.detail)) message = data.detail.map((d: {msg: string}) => tx(d.msg.replace(/^Value error, /, ''))).join(t('；', '; '));
     throw new ApiError(message);
   }
   return response.json();
