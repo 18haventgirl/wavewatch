@@ -78,6 +78,20 @@
 
 服务只监听 127.0.0.1，拒绝其他主机名的请求，也拒绝其他网页发起的修改请求。没有登录功能，不要把 8840 端口转发到公网。
 
+## 版本管理
+
+| 分支 / 标签 | 内容 |
+|---|---|
+| `main` | 当前本机版（V1.1：实时监测、邮件通知、液态玻璃界面） |
+| `feat/v1-realtime-email` | V1.1 的开发分支，已全部并入 `main` |
+| `feat/wechat-miniapp-v2` | 微信小程序与服务器版，暂停开发 |
+| `v0.1.0-local-baseline` | 旧版本（changedetection.io 引擎） |
+| `v1.1.0` | 当前本机版的发布点 |
+
+Git 只管理代码和文档。数据库、附件、日志、备份、Python 环境和前端构建结果都不入库，数据请用 `scripts/backup.py` 另行备份。退回旧版本时，代码用 `git switch` 切换；数据要从备份恢复，切换代码不会改动数据。
+
+提交说明以 feat/fix/refactor/style/test/docs/chore 开头，每次提交只包含一件事。
+
 ## 开发与测试
 
 ```powershell

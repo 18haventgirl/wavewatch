@@ -26,3 +26,11 @@ Thumbs.db
 .vscode/
 coverage/
 project.private.config.json
+
+# Second environment used by the mini-program branch (code lives on that branch)
+.venv-*/
+data-v2/
+logs-v2/
+# Compiler caches
+.swc/
+*.tsbuildinfo
